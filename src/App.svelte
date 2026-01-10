@@ -1,47 +1,65 @@
 <script lang="ts">
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from '/vite.svg'
-  import Counter from './lib/Counter.svelte'
+  let allIncrements = $state([
+    600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800,
+    1900, 2000, 2100, 2200, 2300, 2400,
+  ]);
+
+  let isDragging = $state(false);
+  let dragStart = $state<number | null>(null);
+  let dragEnd = $state<number | null>(null);
+
+  function startDrag(index: number) {
+    isDragging = true;
+    dragStart = index;
+    dragEnd = index;
+  }
+
+  function enterDrag(index: number) {
+    if (!isDragging) return;
+    dragEnd = index;
+  }
+
+  function endDrag() {
+    isDragging = false;
+  }
+
+  let selectedRange = $derived(() => {
+    if (dragStart === null || dragEnd === null) return [];
+    const min = Math.min(dragStart, dragEnd);
+    const max = Math.max(dragStart, dragEnd);
+    return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  });
 </script>
 
 <main>
-  <div>
-    <a href="https://vite.dev" target="_blank" rel="noreferrer">
-      <img src={viteLogo} class="logo" alt="Vite Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank" rel="noreferrer">
-      <img src={svelteLogo} class="logo svelte" alt="Svelte Logo" />
-    </a>
+  <h1>Timey Blocky</h1>
+
+  <div class="time-grid" onpointerup={endDrag} onpointerleave={endDrag}>
+    {#each allIncrements as time, i}
+      <button
+        class="increment"
+        class:selected={selectedRange().includes(i)}
+        onmousedown={() => startDrag(i)}
+        onmouseenter={() => enterDrag(i)}
+      >
+        {time}
+      </button>
+    {/each}
   </div>
-  <h1>Vite + Svelte</h1>
-
-  <div class="card">
-    <Counter />
-  </div>
-
-  <p>
-    Check out <a href="https://github.com/sveltejs/kit#readme" target="_blank" rel="noreferrer">SvelteKit</a>, the official Svelte app framework powered by Vite!
-  </p>
-
-  <p class="read-the-docs">
-    Click on the Vite and Svelte logos to learn more
-  </p>
 </main>
 
 <style>
-  .logo {
-    height: 6em;
-    padding: 1.5em;
-    will-change: filter;
-    transition: filter 300ms;
+  .time-grid {
+    display: grid;
+    grid-template-columns: repeat(1, 1fr);
   }
-  .logo:hover {
-    filter: drop-shadow(0 0 2em #646cffaa);
+
+  .increment {
+    border: 1px solid black;
+    cursor: pointer;
   }
-  .logo.svelte:hover {
-    filter: drop-shadow(0 0 2em #ff3e00aa);
-  }
-  .read-the-docs {
-    color: #888;
+
+  .increment.selected {
+    background: rgba(100, 108, 255, 0.4);
   }
 </style>
