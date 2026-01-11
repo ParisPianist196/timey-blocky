@@ -1,83 +1,110 @@
 <script lang="ts">
-  import { contrastText, randomColor } from "./colors";
+  import { randomColor, contrastText } from "./colors";
 
-  let allIncrements = $state<{
-    [key: number]: { label: string; color: string };
-  }>({
-    600: { label: "", color: "" },
-    700: { label: "", color: "" },
-    800: { label: "", color: "" },
-    900: { label: "", color: "" },
-    1000: { label: "", color: "" },
-    1100: { label: "", color: "" },
-    1200: { label: "", color: "" },
-    1300: { label: "", color: "" },
-    1400: { label: "", color: "" },
-    1500: { label: "", color: "" },
-    1600: { label: "", color: "" },
-    1700: { label: "", color: "" },
-    1800: { label: "", color: "" },
-    1900: { label: "", color: "" },
-    2000: { label: "", color: "" },
-    2100: { label: "", color: "" },
-    2200: { label: "", color: "" },
-    2300: { label: "", color: "" },
-    2400: { label: "", color: "" },
-  });
+  /* ---- Time slots ---- */
+  const times = [
+    600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800,
+    1900, 2000, 2100, 2200, 2300, 2400,
+  ];
 
+  /* ---- Drag state ---- */
   let isDragging = $state(false);
   let dragStart = $state<number | null>(null);
   let dragEnd = $state<number | null>(null);
+  let previewColor = $state("");
+
+  /* ---- Committed ranges ---- */
   let ranges = $state<
-    Array<{ label: string; color: string; increments: number[] }>
+    Array<{ start: number; end: number; color: string; label: string }>
   >([]);
 
-  function startDrag(index: number) {
+  /* ---- Drag handlers ---- */
+  function startDrag(time: number) {
     isDragging = true;
-    dragStart = index;
-    dragEnd = index;
+    dragStart = time;
+    dragEnd = time;
+    previewColor = randomColor();
   }
 
-  function enterDrag(index: number) {
+  function enterDrag(time: number) {
     if (!isDragging) return;
-    addSelection();
-    dragEnd = index;
+    dragEnd = time;
   }
 
   function endDrag() {
-    isDragging = false;
-  }
-
-  let addSelection = () => {
-    if (!(dragStart && dragEnd)) {
+    if (!isDragging || dragStart === null || dragEnd === null) {
+      isDragging = false;
       return;
     }
+
+    const start = Math.min(dragStart, dragEnd);
+    const end = Math.max(dragStart, dragEnd);
+
+    ranges.push({
+      start,
+      end,
+      color: previewColor,
+      label: "Block",
+    });
+
+    isDragging = false;
+    dragStart = null;
+    dragEnd = null;
+  }
+
+  /* ---- Derived helpers ---- */
+  function inPreview(time: number) {
+    if (!isDragging || dragStart === null || dragEnd === null) return false;
     const min = Math.min(dragStart, dragEnd);
     const max = Math.max(dragStart, dragEnd);
-    const color = randomColor();
+    return time >= min && time <= max;
+  }
 
-    allIncrements[min].label = "test";
+  function committedRange(time: number) {
+    return ranges.find((r) => time >= r.start && time <= r.end);
+  }
 
-    for (let incr of Object.keys(allIncrements)) {
-      if (Number(incr) >= min && Number(incr) <= max)
-        allIncrements[Number(incr)].color = color;
+  function cellStyle(time: number) {
+    const committed = committedRange(time);
+
+    if (committed) {
+      return {
+        bg: committed.color,
+        text: contrastText(committed.color),
+        label: time == committed.start ? committed.label : "",
+      };
     }
-  };
+
+    if (inPreview(time)) {
+      return {
+        bg: previewColor,
+        text: contrastText(previewColor),
+        label: "",
+      };
+    }
+
+    return { bg: "", text: "#000", label: "" };
+  }
 </script>
 
 <main>
   <h1>TimeyBlocky</h1>
 
   <div class="time-grid" onpointerup={endDrag} onpointerleave={endDrag}>
-    {#each Object.keys(allIncrements) as time}
+    {#each times as time}
+      {@const style = cellStyle(time)}
+
       {time}
       <button
-        class="increment"
-        style={`background-color: ${allIncrements[Number(time)].color}; color: ${contrastText(allIncrements[Number(time)].color)}`}
-        onmousedown={() => startDrag(Number(time))}
-        onmouseenter={() => enterDrag(Number(time))}
+        class="cell"
+        style="
+          background-color: {style.bg};
+          color: {style.text};
+        "
+        onpointerdown={() => startDrag(time)}
+        onpointerenter={() => enterDrag(time)}
       >
-        {allIncrements[Number(time)].label}
+        {style.label}
       </button>
     {/each}
   </div>
@@ -87,11 +114,13 @@
   .time-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+    user-select: none;
   }
 
-  .increment {
+  .cell {
     height: 32px;
-    border: 1px solid black;
+    border: 1px solid #000;
     cursor: pointer;
+    font-weight: 500;
   }
 </style>
