@@ -282,8 +282,6 @@
   .remove-btn {
     width: 27px;
     height: 27px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    line-height: 27px;
   }
 </style>
