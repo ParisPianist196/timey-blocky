@@ -273,7 +273,7 @@
   input {
     background-color: transparent;
     border: none;
-    max-width: 170px;
+    max-width: 165px;
   }
   input:focus {
     border: none;
