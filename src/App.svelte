@@ -1,5 +1,18 @@
 <script lang="ts">
   import { randomColor, contrastText } from "./colors";
+  import { supabase } from "./lib/supabase";
+
+  type NewRange = {
+    start: number;
+    end: number;
+    color: string;
+    label: string;
+    owner_id: string | undefined | null;
+  };
+
+  type Range = NewRange & {
+    id: number;
+  };
 
   /* ---- Time slots ---- */
   const times = [
@@ -17,25 +30,46 @@
   let previewColor = $state("");
   let curInput = $state<HTMLInputElement | null>(null);
   let inputLabelOn = $state(false);
-  let ranges = $state<
-    Array<{ start: number; end: number; color: string; label: string }>
-  >([]);
+  let ranges = $state<Array<Range>>([]);
+  let password = $state("");
+  let loggedIn = $state(false);
+
+  supabase?.auth.onAuthStateChange((_e, session) => {
+    loggedIn = !!session?.user;
+  });
+
+  const EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
   /* ---- Load ranges from localStorage on init ---- */
+  const loadRanges = async () => {
+    if (!supabase) return;
+
+    const { data, error } = await supabase.from("ranges").select("*");
+
+    if (!error && data) {
+      ranges = data;
+    }
+  };
+
   $effect(() => {
-    const stored = localStorage.getItem("timeyblocky_ranges");
-    if (stored) {
-      try {
-        ranges = JSON.parse(stored);
-      } catch {
-        ranges = [];
+    if (supabase) {
+      loadRanges();
+    } else {
+      const stored = localStorage.getItem("timeyblocky_ranges");
+      if (stored) {
+        try {
+          ranges = JSON.parse(stored);
+        } catch {
+          ranges = [];
+        }
       }
     }
   });
 
   /* ---- Save ranges to localStorage whenever they change ---- */
   $effect(() => {
-    localStorage.setItem("timeyblocky_ranges", JSON.stringify(ranges));
+    if (!supabase)
+      localStorage.setItem("timeyblocky_ranges", JSON.stringify(ranges));
   });
 
   /* ---- Drag handlers ---- */
@@ -46,7 +80,7 @@
     previewColor = randomColor();
   }
 
-  function endDrag() {
+  async function endDrag() {
     if (!isDragging || dragStart === null || dragEnd === null) {
       isDragging = false;
       return;
@@ -62,12 +96,31 @@
       return;
     }
 
-    ranges.push({
+    let ownerId = (await supabase?.auth.getUser())?.data.user?.id;
+
+    let newRange: NewRange = {
       start,
       end,
       color: previewColor,
       label: "",
-    });
+      owner_id: ownerId,
+    };
+
+    if (supabase && ownerId) {
+      const { data, error } = await supabase
+        .from("ranges")
+        .insert(newRange)
+        .select()
+        .single();
+
+      if (!error && data) {
+        ranges.push(data);
+        inputLabelOn = true;
+      }
+    } else {
+      ranges.push({ ...newRange, id: 123 });
+    }
+
     inputLabelOn = true;
 
     isDragging = false;
@@ -135,17 +188,16 @@
     return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
   }
 
-  function saveRanges() {
-    localStorage.setItem("timeyblocky_ranges", JSON.stringify(ranges));
-  }
-
   function removeRange(e: Event, time: number) {
     // Find the index of the range containing this time
     e.stopPropagation();
     const index = ranges.findIndex((r) => time >= r.start && time <= r.end);
-    if (index !== -1) {
-      ranges.splice(index, 1); // remove it
-      saveRanges(); // persist
+    if (index === -1) return;
+    const id = ranges[index].id;
+    ranges.splice(index, 1);
+
+    if (supabase) {
+      supabase.from("ranges").delete().eq("id", id);
     }
   }
 
@@ -172,67 +224,132 @@
   function hasOverlap(start: number, end: number) {
     return ranges.some((r) => overlaps(start, end, r.start, r.end));
   }
+
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function debouncedSave(label: string, id: number, delay = 400) {
+    if (saveTimer) clearTimeout(saveTimer);
+
+    saveTimer = setTimeout(async () => {
+      if (supabase) {
+        await supabase.from("ranges").update({ label }).eq("id", id);
+      }
+    }, delay);
+  }
+
+  async function clearAll() {
+    const ids = ranges.map((r) => r.id);
+    ranges = [];
+
+    if (supabase && ids.length) {
+      await supabase.from("ranges").delete().in("id", ids);
+    }
+  }
+
+  async function login() {
+    if (!supabase) return;
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: EMAIL,
+      password,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data.user) {
+      loggedIn = true;
+    }
+  }
 </script>
 
 <main>
-  <h1>🕰️TimeyBlocky🕰️</h1>
-  <button class="clear-button" onclick={() => (ranges = [])}>Clear</button>
-  <div
-    class="time-grid"
-    onpointerdown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
-    onpointermove={handlePointerMove}
-    onpointerup={endDrag}
-    onpointercancel={endDrag}
-  >
-    {#each times as time}
-      {@const style = cellStyle(time)}
+  {#if supabase && !loggedIn}
+    <div class="password-page">
+      <input
+        class="password"
+        type="password"
+        bind:value={password}
+        onkeypress={(e) => {
+          if (e.key == "Enter") login();
+        }}
+      />
+    </div>
+  {:else}
+    <div class="container">
+      <h1>🕰️TimeyBlocky🕰️</h1>
+      <button class="clear-button" onclick={clearAll}>Clear</button>
+      <div
+        class="time-grid"
+        onpointerdown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+        onpointermove={handlePointerMove}
+        onpointerup={endDrag}
+        onpointercancel={endDrag}
+      >
+        {#each times as time}
+          {@const style = cellStyle(time)}
 
-      {formatTime(time)}
-      <button
-        class="cell"
-        style="
+          {formatTime(time)}
+          <button
+            class="cell"
+            style="
           background-color: {style.bg};
           color: {style.text};
         "
-        onpointerdown={() => startDrag(time)}
-        data-time={time}
-      >
-        {#if style.inputLabelOn}
-          <input
-            bind:this={curInput}
-            bind:value={style.range.label}
-            style="
+            onpointerdown={() => startDrag(time)}
+            data-time={time}
+          >
+            {#if style.inputLabelOn}
+              <input
+                bind:this={curInput}
+                bind:value={style.range.label}
+                style="
               background-color: {style.bg};
               color: {style.text};
             "
-            oninput={() => saveRanges()}
-          />
-          <span
-            onkeydown={(e) => {
-              if (e.key === "Enter" || e.key === " ") removeRange(e, time);
-            }}
-            class="remove-btn"
-            role="button"
-            tabindex="0"
-            onpointerdown={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-            }}
-            onclick={(e) => removeRange(e, time)}
-          >
-            ✕
-          </span>
-        {:else}
-          {style.label}
-        {/if}
-      </button>
-    {/each}
-  </div>
+                oninput={(e) => {
+                  style.range.label = (e.target as HTMLInputElement)?.value;
+                  debouncedSave(
+                    (e.target as HTMLInputElement)?.value,
+                    style.range.id
+                  );
+                }}
+              />
+              <span
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") removeRange(e, time);
+                }}
+                class="remove-btn"
+                role="button"
+                tabindex="0"
+                onpointerdown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                onclick={(e) => removeRange(e, time)}
+              >
+                ✕
+              </span>
+            {:else}
+              {style.label}
+            {/if}
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </main>
 
 <style>
   h1 {
     text-align: center;
+  }
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100vw;
   }
   .clear-button {
     position: fixed;
@@ -284,5 +401,25 @@
     width: 27px;
     height: 27px;
     line-height: 27px;
+  }
+  .password-page {
+    position: fixed;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--contrast-color);
+    color: white;
+    height: 100vh;
+    width: 100vw;
+    top: 0;
+    left: 0;
+  }
+  .password {
+    background: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+  }
+  .password:focus {
+    background: white;
   }
 </style>

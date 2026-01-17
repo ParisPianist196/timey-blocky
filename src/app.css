@@ -27,13 +27,6 @@ body {
   min-height: 100vh;
 }
 
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
 button {
   border: none;
   font-size: 1em;
