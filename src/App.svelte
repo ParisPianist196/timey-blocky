@@ -188,7 +188,7 @@
     return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
   }
 
-  function removeRange(e: Event, time: number) {
+  async function removeRange(e: Event, time: number) {
     // Find the index of the range containing this time
     e.stopPropagation();
     const index = ranges.findIndex((r) => time >= r.start && time <= r.end);
@@ -197,7 +197,7 @@
     ranges.splice(index, 1);
 
     if (supabase) {
-      supabase.from("ranges").delete().eq("id", id);
+      await supabase.from("ranges").delete().eq("id", id);
     }
   }
 
@@ -216,7 +216,7 @@
     aStart: number,
     aEnd: number,
     bStart: number,
-    bEnd: number
+    bEnd: number,
   ) {
     return aStart <= bEnd && aEnd >= bStart;
   }
@@ -312,7 +312,7 @@
                   style.range.label = (e.target as HTMLInputElement)?.value;
                   debouncedSave(
                     (e.target as HTMLInputElement)?.value,
-                    style.range.id
+                    style.range.id,
                   );
                 }}
               />
