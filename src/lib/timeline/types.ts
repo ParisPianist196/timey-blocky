@@ -4,7 +4,6 @@ export interface TimeBlock {
   end: number;
   color: string;
   label: string;
-  owner_id: string;
 }
 
 export interface TimelineSelection {
