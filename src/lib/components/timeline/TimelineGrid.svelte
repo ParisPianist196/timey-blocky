@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
+  import TimelineBlock from "./TimelineBlock.svelte";
 
   interface Props {
     config: TimelineConfig;
@@ -11,23 +12,32 @@
   const totalMinutes = $derived(config.dayEnd - config.dayStart);
 
   const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
+  const hourCount = $derived(Math.ceil((config.dayEnd - config.dayStart) / 60));
 
-  const hourCount = $derived(Math.ceil(totalMinutes / 60));
-
-  function hourTop(index: number) {
+  function hourTop(index: number): number {
     return index * config.pixelsPerHour;
   }
 
-  function formatHour(minutes: number) {
-    const hour = Math.floor(minutes / 60);
-    const minute = minutes % 60;
+  function minutesForHour(index: number): number {
+    return config.dayStart + index * 60;
+  }
 
-    const suffix = hour >= 12 ? "PM" : "AM";
-    const displayHour = hour % 12 || 12;
+  function formatHour(minutes: number): string {
+    const hours24 = Math.floor(minutes / 60);
+    const minutesPart = minutes % 60;
 
-    return minute === 0
-      ? `${displayHour} ${suffix}`
-      : `${displayHour}:${String(minute).padStart(2, "0")} ${suffix}`;
+    if (hours24 === 24) {
+      return "12 AM";
+    }
+
+    const period = hours24 >= 12 ? "PM" : "AM";
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+
+    if (minutesPart === 0) {
+      return `${hours12} ${period}`;
+    }
+
+    return `${hours12}:${minutesPart.toString().padStart(2, "0")} ${period}`;
   }
 </script>
 
@@ -55,14 +65,7 @@
   <!-- Time blocks -->
   <div class="blocks" aria-hidden="true">
     {#each blocks as block (block.id)}
-      <div
-        class="block-wrapper"
-        style="
-          top: {((block.start - config.dayStart) / 60) *
-          config.pixelsPerHour}px;
-          height: {((block.end - block.start) / 60) * config.pixelsPerHour}px;
-        "
-      ></div>
+      <TimelineBlock {block} {config} />
     {/each}
   </div>
 </div>
@@ -110,11 +113,5 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-  }
-
-  .block-wrapper {
-    position: absolute;
-    left: 4.5rem;
-    right: 0.75rem;
   }
 </style>

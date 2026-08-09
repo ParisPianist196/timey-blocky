@@ -1,9 +1,8 @@
 <script lang="ts">
   import TimelineGrid from "@components/timeline/TimelineGrid.svelte";
-  import TimelineRuler from "@components/timeline/TimelineRuler.svelte";
 
-  import { nhost } from "@db/client";
   import { getRanges } from "@db/ranges";
+  import { getCurrentUser } from "@lib/db/auth";
 
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
 
@@ -24,8 +23,7 @@
     error = null;
 
     try {
-      const userData = await nhost.auth.getUser();
-      const user = userData.body;
+      const user = getCurrentUser();
 
       if (!user) {
         throw new Error("You must be signed in to load your timeline.");
@@ -54,53 +52,34 @@
    * Convert a database time value such as "10:30:00"
    * into minutes since midnight.
    */
-  function timeStringToMinutes(time: string): number {
-    const [hours, minutes] = time.split(":").map(Number);
+  function timeStringToMinutes(timestamp: string): number {
+    const date = new Date(timestamp);
 
-    return hours * 60 + minutes;
+    return date.getHours() * 60 + date.getMinutes();
   }
 
   loadRanges();
 </script>
 
 <div class="timeline">
-  <div class="timeline-ruler">
-    <TimelineRuler {config} />
-  </div>
-
-  <div class="timeline-grid">
-    {#if loading}
-      <div class="status">Loading...</div>
-    {:else if error}
-      <div class="status error">
-        {error}
-      </div>
-    {:else}
-      <TimelineGrid {config} {blocks} />
-    {/if}
-  </div>
+  {#if loading}
+    <div class="status">Loading...</div>
+  {:else if error}
+    <div class="status error">
+      {error}
+    </div>
+  {:else}
+    <TimelineGrid {config} {blocks} />
+  {/if}
 </div>
 
 <style>
   .timeline {
-    position: relative;
-    display: flex;
+    max-width: 300px;
     width: 100%;
+    min-height: 600px;
     height: 100%;
-    overflow: hidden;
-  }
-
-  .timeline-ruler {
-    position: relative;
-    flex: 0 0 4rem;
-    height: 100%;
-  }
-
-  .timeline-grid {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-    min-height: 100%;
+    overflow-y: auto;
   }
 
   .status {
