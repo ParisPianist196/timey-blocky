@@ -5,6 +5,7 @@
   import { getCurrentUser } from "@lib/db/auth";
 
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
+  import TimelineRuler from "./TimelineRuler.svelte";
 
   const config: TimelineConfig = {
     dayStart: 600,
@@ -69,7 +70,10 @@
       {error}
     </div>
   {:else}
-    <TimelineGrid {config} {blocks} />
+    <div class="wrapper">
+      <TimelineRuler {config} />
+      <TimelineGrid {config} {blocks} />
+    </div>
   {/if}
 </div>
 
@@ -80,6 +84,7 @@
     min-height: 600px;
     height: 100%;
     overflow-y: auto;
+    padding: 12px;
   }
 
   .status {
