@@ -7,6 +7,12 @@
     top: number;
     height: number;
     editing?: boolean;
+
+    onpointerdown?: (event: PointerEvent) => void;
+    onpointermove?: (event: PointerEvent) => void;
+    onpointerup?: (event: PointerEvent) => void;
+    onpointercancel?: (event: PointerEvent) => void;
+
     ontitlechange?: (title: string) => void;
     oncancel?: () => void;
   }
@@ -17,12 +23,18 @@
     top,
     height,
     editing = false,
+
+    onpointerdown,
+    onpointermove,
+    onpointerup,
+    onpointercancel,
+
     ontitlechange,
     oncancel,
   }: Props = $props();
 
   let titleInput = $state<HTMLInputElement | null>(null);
-  let title = $state(block.label);
+  let title = $derived(block.label);
   let finished = $state(false);
 
   $effect(() => {
@@ -44,9 +56,7 @@
 
     finished = true;
 
-    const trimmedTitle = title.trim();
-
-    ontitlechange?.(trimmedTitle);
+    ontitlechange?.(title.trim());
   }
 
   function cancelTitle() {
@@ -71,6 +81,14 @@
       cancelTitle();
     }
   }
+
+  function handlePointerDown(event: PointerEvent) {
+    if (editing) {
+      return;
+    }
+
+    onpointerdown?.(event);
+  }
 </script>
 
 <div
@@ -79,6 +97,10 @@
   style:top={`${top}px`}
   style:height={`${height}px`}
   style:background-color={block.color}
+  onpointerdown={handlePointerDown}
+  {onpointermove}
+  {onpointerup}
+  {onpointercancel}
 >
   {#if editing}
     <input
@@ -86,7 +108,7 @@
       class="title-input"
       type="text"
       bind:value={title}
-      placeholder="What's my name?"
+      placeholder="What are you doing?"
       aria-label="Time block title"
       onkeydown={handleKeydown}
       onblur={commitTitle}
@@ -105,15 +127,23 @@
     left: 48px;
     right: 0;
 
-    border-radius: 8px;
+    box-sizing: border-box;
 
     padding: 8px 12px;
 
-    box-sizing: border-box;
+    border-radius: 8px;
 
     pointer-events: auto;
 
     color: white;
+
+    cursor: grab;
+
+    touch-action: none;
+  }
+
+  .block:active {
+    cursor: grabbing;
   }
 
   .label {
@@ -137,6 +167,10 @@
 
     font: inherit;
     font-weight: 500;
+
+    cursor: text;
+
+    touch-action: auto;
   }
 
   .title-input::placeholder {

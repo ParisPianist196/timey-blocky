@@ -116,13 +116,25 @@
 
   /**
    * Cancel creation of a block currently being edited.
-   *
-   * Since this block has not been persisted yet, cancelling
-   * simply removes it from the local timeline.
    */
   function handleCancelBlock(blockId: string) {
     blocks = blocks.filter((block) => block.id !== blockId);
     editingBlockId = null;
+  }
+
+  /**
+   * Update the position of a block after a move.
+   */
+  function handleBlockMove(blockId: string, start: number, end: number) {
+    blocks = blocks.map((block) =>
+      block.id === blockId
+        ? {
+            ...block,
+            start,
+            end,
+          }
+        : block,
+    );
   }
 
   loadRanges();
@@ -146,6 +158,7 @@
         oncreateblock={handleCreateBlock}
         onblocktitlechange={handleBlockTitleChange}
         oncancelblock={handleCancelBlock}
+        onblockmove={handleBlockMove}
       />
     </div>
   {/if}

@@ -1,7 +1,9 @@
 import type { TimeBlock } from "./types";
 
 export type InteractionState =
-  | { type: "idle" }
+  | {
+      type: "idle";
+    }
   | {
       type: "creating";
       startMinutes: number;

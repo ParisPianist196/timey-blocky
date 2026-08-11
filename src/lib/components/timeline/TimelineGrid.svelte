@@ -1,6 +1,12 @@
 <script lang="ts">
-  import type { DragSelection } from "@timeline/interactions";
-  import { getCreationRange, pixelsToMinutes } from "@timeline/interactions";
+  import type { DragSelection, InteractionState } from "@timeline/interactions";
+
+  import {
+    getCreationRange,
+    getMovedBlockRange,
+    pixelsToMinutes,
+  } from "@timeline/interactions";
+
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
 
   import TimelineBlock from "./TimelineBlock.svelte";
@@ -12,6 +18,7 @@
     oncreateblock?: (range: DragSelection) => void;
     onblocktitlechange?: (blockId: string, title: string) => void;
     oncancelblock?: (blockId: string) => void;
+    onblockmove?: (blockId: string, start: number, end: number) => void;
   }
 
   let {
@@ -21,12 +28,17 @@
     oncreateblock,
     onblocktitlechange,
     oncancelblock,
+    onblockmove,
   }: Props = $props();
 
   const totalMinutes = $derived(config.dayEnd - config.dayStart);
+
   const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
 
-  let isCreating = $state(false);
+  let interaction = $state<InteractionState>({
+    type: "idle",
+  });
+
   let creationStartMinutes = $state(0);
   let creationCurrentMinutes = $state(0);
 
@@ -59,8 +71,7 @@
   /**
    * Convert a pointer's client Y coordinate into timeline minutes.
    */
-  function pointerToMinutes(event: PointerEvent): number {
-    const surface = event.currentTarget as HTMLElement;
+  function pointerToMinutes(event: PointerEvent, surface: HTMLElement): number {
     const rect = surface.getBoundingClientRect();
 
     const pixels = event.clientY - rect.top;
@@ -74,33 +85,130 @@
     return Math.max(config.dayStart, Math.min(minutes, config.dayEnd));
   }
 
-  function handlePointerDown(event: PointerEvent) {
-    // Only start creation with the primary mouse button.
+  /**
+   * Start creating a new block.
+   */
+  function handleCreationPointerDown(event: PointerEvent) {
     if (event.button !== 0) {
       return;
     }
 
-    const minutes = pointerToMinutes(event);
+    const surface = event.currentTarget as HTMLElement;
 
-    isCreating = true;
+    const minutes = pointerToMinutes(event, surface);
+
     creationStartMinutes = minutes;
     creationCurrentMinutes = minutes;
 
-    const surface = event.currentTarget as HTMLElement;
+    interaction = {
+      type: "creating",
+      startMinutes: minutes,
+      currentMinutes: minutes,
+    };
 
     surface.setPointerCapture(event.pointerId);
   }
 
-  function handlePointerMove(event: PointerEvent) {
-    if (!isCreating) {
+  /**
+   * Start moving an existing block.
+   */
+  function handleBlockPointerDown(event: PointerEvent, block: TimeBlock) {
+    if (event.button !== 0) {
       return;
     }
 
-    creationCurrentMinutes = pointerToMinutes(event);
+    // Don't move a block while its title is being edited.
+    if (editingBlockId === block.id) {
+      return;
+    }
+
+    const blockElement = event.currentTarget as HTMLElement;
+
+    const grid = blockElement.closest(".grid");
+
+    if (!(grid instanceof HTMLElement)) {
+      return;
+    }
+
+    const currentMinutes = pointerToMinutes(event, grid);
+
+    const offsetMinutes = currentMinutes - block.start;
+
+    interaction = {
+      type: "moving",
+      blockId: block.id,
+      startMinutes: block.start,
+      currentMinutes,
+      offsetMinutes,
+    };
+
+    blockElement.setPointerCapture(event.pointerId);
+
+    event.preventDefault();
   }
 
-  function handlePointerUp(event: PointerEvent) {
-    if (!isCreating) {
+  /**
+   * Handle pointer movement for both creation and moving.
+   */
+  function handleCreationPointerMove(event: PointerEvent) {
+    if (interaction.type !== "creating") {
+      return;
+    }
+
+    const surface = event.currentTarget as HTMLElement;
+
+    creationCurrentMinutes = pointerToMinutes(event, surface);
+
+    interaction = {
+      ...interaction,
+      currentMinutes: creationCurrentMinutes,
+    };
+  }
+
+  /**
+   * Handle movement of an existing block.
+   */
+  function handleBlockPointerMove(event: PointerEvent) {
+    if (interaction.type !== "moving") {
+      return;
+    }
+
+    const blockId = interaction.blockId;
+    const offsetMinutes = interaction.offsetMinutes;
+
+    const block = blocks.find((candidate) => candidate.id === blockId);
+
+    if (!block) {
+      return;
+    }
+
+    const blockElement = event.currentTarget as HTMLElement;
+
+    const grid = blockElement.closest(".grid");
+
+    if (!(grid instanceof HTMLElement)) {
+      return;
+    }
+
+    const currentMinutes = pointerToMinutes(event, grid);
+
+    const range = getMovedBlockRange(
+      block,
+      currentMinutes,
+      offsetMinutes,
+      config.dayStart,
+      config.dayEnd,
+      config.snapMinutes,
+    );
+
+    onblockmove?.(block.id, range.start, range.end);
+  }
+
+  /**
+   * Finish creating a block.
+   */
+  function handleCreationPointerUp(event: PointerEvent) {
+    if (interaction.type !== "creating") {
       return;
     }
 
@@ -112,7 +220,9 @@
       config.snapMinutes,
     );
 
-    isCreating = false;
+    interaction = {
+      type: "idle",
+    };
 
     if (surface.hasPointerCapture(event.pointerId)) {
       surface.releasePointerCapture(event.pointerId);
@@ -126,22 +236,65 @@
     oncreateblock?.(range);
   }
 
-  function handlePointerCancel(event: PointerEvent) {
-    if (!isCreating) {
+  /**
+   * Finish moving a block.
+   */
+  function handleBlockPointerUp(event: PointerEvent) {
+    if (interaction.type !== "moving") {
+      return;
+    }
+
+    const blockElement = event.currentTarget as HTMLElement;
+
+    interaction = {
+      type: "idle",
+    };
+
+    if (blockElement.hasPointerCapture(event.pointerId)) {
+      blockElement.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  /**
+   * Cancel creation.
+   */
+  function handleCreationPointerCancel(event: PointerEvent) {
+    if (interaction.type !== "creating") {
       return;
     }
 
     const surface = event.currentTarget as HTMLElement;
 
-    isCreating = false;
+    interaction = {
+      type: "idle",
+    };
 
     if (surface.hasPointerCapture(event.pointerId)) {
       surface.releasePointerCapture(event.pointerId);
     }
   }
 
+  /**
+   * Cancel moving.
+   */
+  function handleBlockPointerCancel(event: PointerEvent) {
+    if (interaction.type !== "moving") {
+      return;
+    }
+
+    const blockElement = event.currentTarget as HTMLElement;
+
+    interaction = {
+      type: "idle",
+    };
+
+    if (blockElement.hasPointerCapture(event.pointerId)) {
+      blockElement.releasePointerCapture(event.pointerId);
+    }
+  }
+
   const creationRange = $derived.by(() => {
-    if (!isCreating) {
+    if (interaction.type !== "creating") {
       return null;
     }
 
@@ -178,21 +331,15 @@
 </script>
 
 <div class="grid" style:height={`${totalHeight}px`}>
-  <!--
-    Interactive creation surface.
-
-    This is a real button so the timeline's creation interaction
-    has native interactive semantics rather than putting pointer
-    handlers on a static div.
-  -->
+  <!-- Creation surface -->
   <button
     class="creation-surface"
     type="button"
     aria-label="Create a time block"
-    onpointerdown={handlePointerDown}
-    onpointermove={handlePointerMove}
-    onpointerup={handlePointerUp}
-    onpointercancel={handlePointerCancel}
+    onpointerdown={handleCreationPointerDown}
+    onpointermove={handleCreationPointerMove}
+    onpointerup={handleCreationPointerUp}
+    onpointercancel={handleCreationPointerCancel}
   ></button>
 
   <!-- Time blocks -->
@@ -204,6 +351,10 @@
         top={blockTop(block)}
         height={blockHeight(block)}
         editing={editingBlockId === block.id}
+        onpointerdown={(event) => handleBlockPointerDown(event, block)}
+        onpointermove={handleBlockPointerMove}
+        onpointerup={handleBlockPointerUp}
+        onpointercancel={handleBlockPointerCancel}
         ontitlechange={(title) => onblocktitlechange?.(block.id, title)}
         oncancel={() => oncancelblock?.(block.id)}
       />
