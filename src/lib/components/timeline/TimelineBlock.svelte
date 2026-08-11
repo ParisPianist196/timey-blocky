@@ -13,6 +13,12 @@
     onpointerup?: (event: PointerEvent) => void;
     onpointercancel?: (event: PointerEvent) => void;
 
+    onresizestart?: (event: PointerEvent) => void;
+    onresizeend?: (event: PointerEvent) => void;
+    onresizepointermove?: (event: PointerEvent) => void;
+    onresizepointerup?: (event: PointerEvent) => void;
+    onresizepointercancel?: (event: PointerEvent) => void;
+
     ontitlechange?: (title: string) => void;
     oncancel?: () => void;
   }
@@ -29,12 +35,18 @@
     onpointerup,
     onpointercancel,
 
+    onresizestart,
+    onresizeend,
+    onresizepointermove,
+    onresizepointerup,
+    onresizepointercancel,
+
     ontitlechange,
     oncancel,
   }: Props = $props();
 
   let titleInput = $state<HTMLInputElement | null>(null);
-  let title = $derived(block.label);
+  let title = $state(block.label);
   let finished = $state(false);
 
   $effect(() => {
@@ -89,6 +101,24 @@
 
     onpointerdown?.(event);
   }
+
+  function handleResizeStart(event: PointerEvent) {
+    if (editing) {
+      return;
+    }
+
+    event.stopPropagation();
+    onresizestart?.(event);
+  }
+
+  function handleResizeEnd(event: PointerEvent) {
+    if (editing) {
+      return;
+    }
+
+    event.stopPropagation();
+    onresizeend?.(event);
+  }
 </script>
 
 <div
@@ -102,6 +132,28 @@
   {onpointerup}
   {onpointercancel}
 >
+  {#if !editing}
+    <button
+      class="resize-handle resize-handle-start"
+      type="button"
+      aria-label={`Resize start of ${block.label || "time block"}`}
+      onpointerdown={handleResizeStart}
+      onpointermove={onresizepointermove}
+      onpointerup={onresizepointerup}
+      onpointercancel={onresizepointercancel}
+    ></button>
+
+    <button
+      class="resize-handle resize-handle-end"
+      type="button"
+      aria-label={`Resize end of ${block.label || "time block"}`}
+      onpointerdown={handleResizeEnd}
+      onpointermove={onresizepointermove}
+      onpointerup={onresizepointerup}
+      onpointercancel={onresizepointercancel}
+    ></button>
+  {/if}
+
   {#if editing}
     <input
       bind:this={titleInput}
@@ -148,6 +200,75 @@
 
   .label {
     font-weight: 500;
+  }
+
+  .resize-handle {
+    position: absolute;
+    left: 0;
+    right: 0;
+
+    width: 100%;
+
+    margin: 0;
+    padding: 0;
+
+    border: 0;
+
+    background: transparent;
+
+    cursor: ns-resize;
+
+    z-index: 2;
+
+    touch-action: none;
+  }
+
+  .resize-handle-start {
+    top: -5px;
+    height: 10px;
+  }
+
+  .resize-handle-end {
+    bottom: -5px;
+    height: 10px;
+  }
+
+  .resize-handle::after {
+    content: "";
+
+    position: absolute;
+    left: 50%;
+
+    width: 32px;
+    height: 3px;
+
+    transform: translateX(-50%);
+
+    border-radius: 999px;
+
+    background: rgb(255 255 255 / 0.65);
+
+    opacity: 0;
+
+    transition: opacity 120ms ease;
+  }
+
+  .resize-handle-start::after {
+    top: 3px;
+  }
+
+  .resize-handle-end::after {
+    bottom: 3px;
+  }
+
+  .resize-handle:hover::after,
+  .resize-handle:focus-visible::after {
+    opacity: 1;
+  }
+
+  .resize-handle:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 1px;
   }
 
   .title-input {
