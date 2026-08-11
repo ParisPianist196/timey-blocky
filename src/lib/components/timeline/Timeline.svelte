@@ -15,7 +15,24 @@
     pixelsPerHour: 80,
   };
 
+  const blockColors = [
+    "#ef4444",
+    "#f97316",
+    "#f59e0b",
+    "#84cc16",
+    "#22c55e",
+    "#14b8a6",
+    "#06b6d4",
+    "#3b82f6",
+    "#6366f1",
+    "#8b5cf6",
+    "#a855f7",
+    "#ec4899",
+    "#f43f5e",
+  ];
+
   let blocks: TimeBlock[] = $state([]);
+  let editingBlockId = $state<string | null>(null);
 
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -51,6 +68,15 @@
   }
 
   /**
+   * Return a random color from the timeline block palette.
+   */
+  function getRandomBlockColor(): string {
+    const index = Math.floor(Math.random() * blockColors.length);
+
+    return blockColors[index];
+  }
+
+  /**
    * Convert a database time value such as "10:30:00"
    * into minutes since midnight.
    */
@@ -61,21 +87,42 @@
   }
 
   /**
-   * Add a newly-created block to the local timeline.
-   *
-   * Database persistence will be added once the interaction
-   * behavior is working.
+   * Add a newly-created block to the local timeline and
+   * immediately put it into title-editing mode.
    */
   function handleCreateBlock(range: { start: number; end: number }) {
     const block: TimeBlock = {
       id: crypto.randomUUID(),
       start: range.start,
       end: range.end,
-      color: "#6366f1",
-      label: "New block",
+      color: getRandomBlockColor(),
+      label: "",
     };
 
     blocks = [...blocks, block];
+    editingBlockId = block.id;
+  }
+
+  /**
+   * Update the title of a block currently being edited.
+   */
+  function handleBlockTitleChange(blockId: string, title: string) {
+    blocks = blocks.map((block) =>
+      block.id === blockId ? { ...block, label: title } : block,
+    );
+
+    editingBlockId = null;
+  }
+
+  /**
+   * Cancel creation of a block currently being edited.
+   *
+   * Since this block has not been persisted yet, cancelling
+   * simply removes it from the local timeline.
+   */
+  function handleCancelBlock(blockId: string) {
+    blocks = blocks.filter((block) => block.id !== blockId);
+    editingBlockId = null;
   }
 
   loadRanges();
@@ -92,7 +139,14 @@
     <div class="wrapper">
       <TimelineRuler {config} />
 
-      <TimelineGrid {config} {blocks} oncreateblock={handleCreateBlock} />
+      <TimelineGrid
+        {config}
+        {blocks}
+        {editingBlockId}
+        oncreateblock={handleCreateBlock}
+        onblocktitlechange={handleBlockTitleChange}
+        oncancelblock={handleCancelBlock}
+      />
     </div>
   {/if}
 </div>

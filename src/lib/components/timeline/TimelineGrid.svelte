@@ -8,10 +8,20 @@
   interface Props {
     config: TimelineConfig;
     blocks: TimeBlock[];
+    editingBlockId?: string | null;
     oncreateblock?: (range: DragSelection) => void;
+    onblocktitlechange?: (blockId: string, title: string) => void;
+    oncancelblock?: (blockId: string) => void;
   }
 
-  let { config, blocks, oncreateblock }: Props = $props();
+  let {
+    config,
+    blocks,
+    editingBlockId = null,
+    oncreateblock,
+    onblocktitlechange,
+    oncancelblock,
+  }: Props = $props();
 
   const totalMinutes = $derived(config.dayEnd - config.dayStart);
   const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
@@ -193,6 +203,9 @@
         {config}
         top={blockTop(block)}
         height={blockHeight(block)}
+        editing={editingBlockId === block.id}
+        ontitlechange={(title) => onblocktitlechange?.(block.id, title)}
+        oncancel={() => oncancelblock?.(block.id)}
       />
     {/each}
 
