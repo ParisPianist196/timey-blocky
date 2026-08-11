@@ -13,6 +13,7 @@
 
 <div
   class="block"
+  data-timeline-block
   style:top={`${top}px`}
   style:height={`${height}px`}
   style:background-color={block.color}
@@ -25,14 +26,18 @@
 <style>
   .block {
     position: absolute;
+
     left: 48px;
     right: 0;
 
     border-radius: 8px;
+
     padding: 8px 12px;
+
     box-sizing: border-box;
 
     pointer-events: auto;
+
     color: white;
   }
 

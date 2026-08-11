@@ -5,6 +5,7 @@
   import { getCurrentUser } from "@lib/db/auth";
 
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
+
   import TimelineRuler from "./TimelineRuler.svelte";
 
   const config: TimelineConfig = {
@@ -59,6 +60,24 @@
     return date.getHours() * 60 + date.getMinutes();
   }
 
+  /**
+   * Add a newly-created block to the local timeline.
+   *
+   * Database persistence will be added once the interaction
+   * behavior is working.
+   */
+  function handleCreateBlock(range: { start: number; end: number }) {
+    const block: TimeBlock = {
+      id: crypto.randomUUID(),
+      start: range.start,
+      end: range.end,
+      color: "#6366f1",
+      label: "New block",
+    };
+
+    blocks = [...blocks, block];
+  }
+
   loadRanges();
 </script>
 
@@ -72,7 +91,8 @@
   {:else}
     <div class="wrapper">
       <TimelineRuler {config} />
-      <TimelineGrid {config} {blocks} />
+
+      <TimelineGrid {config} {blocks} oncreateblock={handleCreateBlock} />
     </div>
   {/if}
 </div>
