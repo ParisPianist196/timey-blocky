@@ -194,10 +194,6 @@
       currentMinutes,
     };
 
-    const handle = event.currentTarget as HTMLElement;
-
-    handle.setPointerCapture(event.pointerId);
-
     event.preventDefault();
   }
 
@@ -228,10 +224,6 @@
       originalEnd: block.end,
       currentMinutes,
     };
-
-    const handle = event.currentTarget as HTMLElement;
-
-    handle.setPointerCapture(event.pointerId);
 
     event.preventDefault();
   }
