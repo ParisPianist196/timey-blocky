@@ -9,15 +9,9 @@
     editing?: boolean;
 
     onpointerdown?: (event: PointerEvent) => void;
-    onpointermove?: (event: PointerEvent) => void;
-    onpointerup?: (event: PointerEvent) => void;
-    onpointercancel?: (event: PointerEvent) => void;
 
     onresizestart?: (event: PointerEvent) => void;
     onresizeend?: (event: PointerEvent) => void;
-    onresizepointermove?: (event: PointerEvent) => void;
-    onresizepointerup?: (event: PointerEvent) => void;
-    onresizepointercancel?: (event: PointerEvent) => void;
 
     ontitlechange?: (title: string) => void;
     oncancel?: () => void;
@@ -31,15 +25,9 @@
     editing = false,
 
     onpointerdown,
-    onpointermove,
-    onpointerup,
-    onpointercancel,
 
     onresizestart,
     onresizeend,
-    onresizepointermove,
-    onresizepointerup,
-    onresizepointercancel,
 
     ontitlechange,
     oncancel,
@@ -104,13 +92,6 @@
     onpointerdown?.(event);
   }
 
-  /**
-   * Begin resizing the start of the block.
-   *
-   * The handle itself captures the pointer so that subsequent
-   * pointermove events continue to arrive even after the pointer
-   * leaves the handle.
-   */
   function handleResizeStart(event: PointerEvent) {
     if (editing) {
       return;
@@ -119,18 +100,11 @@
     event.preventDefault();
     event.stopPropagation();
 
-    const handle = event.currentTarget as HTMLElement;
-
-    handle.setPointerCapture(event.pointerId);
-
     hoveredResizeHandle = "start";
 
     onresizestart?.(event);
   }
 
-  /**
-   * Begin resizing the end of the block.
-   */
   function handleResizeEnd(event: PointerEvent) {
     if (editing) {
       return;
@@ -139,59 +113,9 @@
     event.preventDefault();
     event.stopPropagation();
 
-    const handle = event.currentTarget as HTMLElement;
-
-    handle.setPointerCapture(event.pointerId);
-
     hoveredResizeHandle = "end";
 
     onresizeend?.(event);
-  }
-
-  /**
-   * Forward resize movement.
-   */
-  function handleResizePointerMove(event: PointerEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    onresizepointermove?.(event);
-  }
-
-  /**
-   * Finish resizing.
-   */
-  function handleResizePointerUp(event: PointerEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const handle = event.currentTarget as HTMLElement;
-
-    if (handle.hasPointerCapture(event.pointerId)) {
-      handle.releasePointerCapture(event.pointerId);
-    }
-
-    hoveredResizeHandle = null;
-
-    onresizepointerup?.(event);
-  }
-
-  /**
-   * Cancel resizing.
-   */
-  function handleResizePointerCancel(event: PointerEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const handle = event.currentTarget as HTMLElement;
-
-    if (handle.hasPointerCapture(event.pointerId)) {
-      handle.releasePointerCapture(event.pointerId);
-    }
-
-    hoveredResizeHandle = null;
-
-    onresizepointercancel?.(event);
   }
 </script>
 
@@ -202,51 +126,30 @@
   style:height={`${height}px`}
   style:background-color={block.color}
   onpointerdown={handlePointerDown}
-  {onpointermove}
-  {onpointerup}
-  {onpointercancel}
 >
   {#if !editing}
-    <!-- Start resize handle -->
+    <!-- Top resize handle -->
     <button
       class:visible={hoveredResizeHandle === "start"}
       class="resize-handle resize-handle-start"
       type="button"
       aria-label={`Resize start of ${block.label || "time block"}`}
       onpointerdown={handleResizeStart}
-      onpointermove={handleResizePointerMove}
-      onpointerup={handleResizePointerUp}
-      onpointercancel={handleResizePointerCancel}
       onpointerenter={() => (hoveredResizeHandle = "start")}
-      onpointerleave={() => {
-        if (!hoveredResizeHandle) {
-          return;
-        }
-
-        hoveredResizeHandle = null;
-      }}
+      onpointerleave={() => (hoveredResizeHandle = null)}
     >
       <span class="handle-grip"></span>
     </button>
 
-    <!-- End resize handle -->
+    <!-- Bottom resize handle -->
     <button
       class:visible={hoveredResizeHandle === "end"}
       class="resize-handle resize-handle-end"
       type="button"
       aria-label={`Resize end of ${block.label || "time block"}`}
       onpointerdown={handleResizeEnd}
-      onpointermove={handleResizePointerMove}
-      onpointerup={handleResizePointerUp}
-      onpointercancel={handleResizePointerCancel}
       onpointerenter={() => (hoveredResizeHandle = "end")}
-      onpointerleave={() => {
-        if (!hoveredResizeHandle) {
-          return;
-        }
-
-        hoveredResizeHandle = null;
-      }}
+      onpointerleave={() => (hoveredResizeHandle = null)}
     >
       <span class="handle-grip"></span>
     </button>
@@ -301,13 +204,14 @@
   }
 
   /*
-   * Resize handles
+   * The handles are deliberately inside the block.
    *
-   * The entire 14px area is clickable.
-   * The visible line is only the visual affordance.
+   * The visible grip is only 4px tall, but the actual
+   * clickable area is 14px tall.
    */
   .resize-handle {
     position: absolute;
+
     left: 0;
     right: 0;
 
@@ -319,9 +223,9 @@
 
     border: 0;
 
-    background: transparent;
-
     appearance: none;
+
+    background: transparent;
 
     cursor: ns-resize;
 

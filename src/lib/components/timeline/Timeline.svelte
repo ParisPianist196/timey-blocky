@@ -138,6 +138,17 @@
   }
 
   loadRanges();
+  function handleBlockResize(blockId: string, start: number, end: number) {
+    blocks = blocks.map((block) =>
+      block.id === blockId
+        ? {
+            ...block,
+            start,
+            end,
+          }
+        : block,
+    );
+  }
 </script>
 
 <div class="timeline">
@@ -159,6 +170,7 @@
         onblocktitlechange={handleBlockTitleChange}
         oncancelblock={handleCancelBlock}
         onblockmove={handleBlockMove}
+        onblockresize={handleBlockResize}
       />
     </div>
   {/if}

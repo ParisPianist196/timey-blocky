@@ -3,9 +3,9 @@
 
   import {
     getCreationRange,
+    getMovedBlockRange,
     getResizedEnd,
     getResizedStart,
-    getMovedBlockRange,
     pixelsToMinutes,
   } from "@timeline/interactions";
 
@@ -40,9 +40,7 @@
     onblockresize,
   }: Props = $props();
 
-  const totalMinutes = $derived(config.dayEnd - config.dayStart);
-
-  const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
+  let gridElement = $state<HTMLElement | null>(null);
 
   let interaction = $state<InteractionState>({
     type: "idle",
@@ -50,6 +48,10 @@
 
   let creationStartMinutes = $state(0);
   let creationCurrentMinutes = $state(0);
+
+  const totalMinutes = $derived(config.dayEnd - config.dayStart);
+
+  const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
 
   function blockTop(block: TimeBlock): number {
     return ((block.start - config.dayStart) / 60) * config.pixelsPerHour;
@@ -68,6 +70,7 @@
     }
 
     const period = hours24 >= 12 ? "PM" : "AM";
+
     const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
 
     if (minutesPart === 0) {
@@ -78,10 +81,15 @@
   }
 
   /**
-   * Convert a pointer's client Y coordinate into timeline minutes.
+   * Convert a pointer's client Y coordinate into
+   * minutes on the timeline.
    */
-  function pointerToMinutes(event: PointerEvent, surface: HTMLElement): number {
-    const rect = surface.getBoundingClientRect();
+  function pointerToMinutes(event: PointerEvent): number {
+    if (!gridElement) {
+      return config.dayStart;
+    }
+
+    const rect = gridElement.getBoundingClientRect();
 
     const pixels = event.clientY - rect.top;
 
@@ -95,17 +103,6 @@
   }
 
   /**
-   * Find the timeline grid from a pointer event.
-   */
-  function getGridFromPointer(event: PointerEvent): HTMLElement | null {
-    const element = event.currentTarget as HTMLElement;
-
-    const grid = element.closest(".grid");
-
-    return grid instanceof HTMLElement ? grid : null;
-  }
-
-  /**
    * Start creating a new block.
    */
   function handleCreationPointerDown(event: PointerEvent) {
@@ -113,9 +110,7 @@
       return;
     }
 
-    const surface = event.currentTarget as HTMLElement;
-
-    const minutes = pointerToMinutes(event, surface);
+    const minutes = pointerToMinutes(event);
 
     creationStartMinutes = minutes;
     creationCurrentMinutes = minutes;
@@ -126,7 +121,9 @@
       currentMinutes: minutes,
     };
 
-    surface.setPointerCapture(event.pointerId);
+    gridElement?.setPointerCapture(event.pointerId);
+
+    event.preventDefault();
   }
 
   /**
@@ -141,13 +138,7 @@
       return;
     }
 
-    const grid = getGridFromPointer(event);
-
-    if (!grid) {
-      return;
-    }
-
-    const currentMinutes = pointerToMinutes(event, grid);
+    const currentMinutes = pointerToMinutes(event);
 
     const offsetMinutes = currentMinutes - block.start;
 
@@ -159,11 +150,10 @@
       offsetMinutes,
     };
 
-    const blockElement = event.currentTarget as HTMLElement;
-
-    blockElement.setPointerCapture(event.pointerId);
+    gridElement?.setPointerCapture(event.pointerId);
 
     event.preventDefault();
+    event.stopPropagation();
   }
 
   /**
@@ -178,13 +168,7 @@
       return;
     }
 
-    const grid = getGridFromPointer(event);
-
-    if (!grid) {
-      return;
-    }
-
-    const currentMinutes = pointerToMinutes(event, grid);
+    const currentMinutes = pointerToMinutes(event);
 
     interaction = {
       type: "resizing-start",
@@ -194,7 +178,15 @@
       currentMinutes,
     };
 
+    /*
+     * The GRID owns pointer capture for every interaction.
+     * This means the pointer can leave the handle while
+     * we continue receiving pointermove events.
+     */
+    gridElement?.setPointerCapture(event.pointerId);
+
     event.preventDefault();
+    event.stopPropagation();
   }
 
   /**
@@ -209,13 +201,7 @@
       return;
     }
 
-    const grid = getGridFromPointer(event);
-
-    if (!grid) {
-      return;
-    }
-
-    const currentMinutes = pointerToMinutes(event, grid);
+    const currentMinutes = pointerToMinutes(event);
 
     interaction = {
       type: "resizing-end",
@@ -225,36 +211,51 @@
       currentMinutes,
     };
 
+    gridElement?.setPointerCapture(event.pointerId);
+
     event.preventDefault();
+    event.stopPropagation();
   }
 
   /**
-   * Handle pointer movement while creating.
+   * Handle all pointer movement from the grid.
    */
-  function handleCreationPointerMove(event: PointerEvent) {
-    if (interaction.type !== "creating") {
+  function handlePointerMove(event: PointerEvent) {
+    if (interaction.type === "creating") {
+      creationCurrentMinutes = pointerToMinutes(event);
+
+      interaction = {
+        ...interaction,
+        currentMinutes: creationCurrentMinutes,
+      };
+
       return;
     }
 
-    const surface = event.currentTarget as HTMLElement;
+    if (interaction.type === "moving") {
+      handleMovePointerMove(event);
+      return;
+    }
 
-    creationCurrentMinutes = pointerToMinutes(event, surface);
-
-    interaction = {
-      ...interaction,
-      currentMinutes: creationCurrentMinutes,
-    };
+    if (
+      interaction.type === "resizing-start" ||
+      interaction.type === "resizing-end"
+    ) {
+      handleResizePointerMove(event);
+    }
   }
 
   /**
-   * Handle pointer movement while moving a block.
+   * Move a block.
    */
-  function handleBlockPointerMove(event: PointerEvent) {
+  function handleMovePointerMove(event: PointerEvent) {
     if (interaction.type !== "moving") {
       return;
     }
 
-    const { blockId, offsetMinutes } = interaction;
+    // Capture the narrowed values before updating interaction.
+    const blockId = interaction.blockId;
+    const offsetMinutes = interaction.offsetMinutes;
 
     const block = blocks.find((candidate) => candidate.id === blockId);
 
@@ -262,13 +263,7 @@
       return;
     }
 
-    const grid = getGridFromPointer(event);
-
-    if (!grid) {
-      return;
-    }
-
-    const currentMinutes = pointerToMinutes(event, grid);
+    const currentMinutes = pointerToMinutes(event);
 
     const range = getMovedBlockRange(
       block,
@@ -279,11 +274,15 @@
       config.snapMinutes,
     );
 
-    onblockmove?.(block.id, range.start, range.end);
-  }
+    interaction = {
+      ...interaction,
+      currentMinutes,
+    };
 
+    onblockmove?.(blockId, range.start, range.end);
+  }
   /**
-   * Handle pointer movement while resizing a block.
+   * Resize a block.
    */
   function handleResizePointerMove(event: PointerEvent) {
     if (
@@ -293,29 +292,21 @@
       return;
     }
 
-    const { blockId, originalStart, originalEnd } = interaction;
+    const currentMinutes = pointerToMinutes(event);
 
-    const grid = getGridFromPointer(event);
-
-    if (!grid) {
-      return;
-    }
-
-    const currentMinutes = pointerToMinutes(event, grid);
-
-    let start = originalStart;
-    let end = originalEnd;
+    let start = interaction.originalStart;
+    let end = interaction.originalEnd;
 
     if (interaction.type === "resizing-start") {
       start = getResizedStart(
-        originalEnd,
+        interaction.originalEnd,
         currentMinutes,
         config.dayStart,
         config.snapMinutes,
       );
     } else {
       end = getResizedEnd(
-        originalStart,
+        interaction.originalStart,
         currentMinutes,
         config.dayEnd,
         config.snapMinutes,
@@ -327,18 +318,38 @@
       currentMinutes,
     };
 
-    onblockresize?.(blockId, start, end);
+    onblockresize?.(interaction.blockId, start, end);
   }
 
   /**
-   * Finish creation.
+   * Handle pointer up for every interaction.
    */
-  function handleCreationPointerUp(event: PointerEvent) {
-    if (interaction.type !== "creating") {
+  function handlePointerUp(event: PointerEvent) {
+    if (interaction.type === "creating") {
+      finishCreation(event);
       return;
     }
 
-    const surface = event.currentTarget as HTMLElement;
+    if (interaction.type === "moving") {
+      finishMove(event);
+      return;
+    }
+
+    if (
+      interaction.type === "resizing-start" ||
+      interaction.type === "resizing-end"
+    ) {
+      finishResize(event);
+    }
+  }
+
+  /**
+   * Finish creating a block.
+   */
+  function finishCreation(event: PointerEvent) {
+    if (interaction.type !== "creating") {
+      return;
+    }
 
     const range = getCreationRange(
       creationStartMinutes,
@@ -346,13 +357,11 @@
       config.snapMinutes,
     );
 
+    releasePointer(event.pointerId);
+
     interaction = {
       type: "idle",
     };
-
-    if (surface.hasPointerCapture(event.pointerId)) {
-      surface.releasePointerCapture(event.pointerId);
-    }
 
     if (range.start === range.end) {
       return;
@@ -362,28 +371,24 @@
   }
 
   /**
-   * Finish moving.
+   * Finish moving a block.
    */
-  function handleBlockPointerUp(event: PointerEvent) {
+  function finishMove(event: PointerEvent) {
     if (interaction.type !== "moving") {
       return;
     }
 
-    const blockElement = event.currentTarget as HTMLElement;
+    releasePointer(event.pointerId);
 
     interaction = {
       type: "idle",
     };
-
-    if (blockElement.hasPointerCapture(event.pointerId)) {
-      blockElement.releasePointerCapture(event.pointerId);
-    }
   }
 
   /**
-   * Finish resizing.
+   * Finish resizing a block.
    */
-  function handleResizePointerUp(event: PointerEvent) {
+  function finishResize(event: PointerEvent) {
     if (
       interaction.type !== "resizing-start" &&
       interaction.type !== "resizing-end"
@@ -391,74 +396,30 @@
       return;
     }
 
-    const handle = event.currentTarget as HTMLElement;
+    releasePointer(event.pointerId);
 
     interaction = {
       type: "idle",
     };
-
-    if (handle.hasPointerCapture(event.pointerId)) {
-      handle.releasePointerCapture(event.pointerId);
-    }
   }
 
   /**
-   * Cancel creation.
+   * Handle any pointer cancellation.
    */
-  function handleCreationPointerCancel(event: PointerEvent) {
-    if (interaction.type !== "creating") {
-      return;
-    }
-
-    const surface = event.currentTarget as HTMLElement;
+  function handlePointerCancel(event: PointerEvent) {
+    releasePointer(event.pointerId);
 
     interaction = {
       type: "idle",
     };
-
-    if (surface.hasPointerCapture(event.pointerId)) {
-      surface.releasePointerCapture(event.pointerId);
-    }
   }
 
   /**
-   * Cancel moving.
+   * Release grid pointer capture safely.
    */
-  function handleBlockPointerCancel(event: PointerEvent) {
-    if (interaction.type !== "moving") {
-      return;
-    }
-
-    const blockElement = event.currentTarget as HTMLElement;
-
-    interaction = {
-      type: "idle",
-    };
-
-    if (blockElement.hasPointerCapture(event.pointerId)) {
-      blockElement.releasePointerCapture(event.pointerId);
-    }
-  }
-
-  /**
-   * Cancel resizing.
-   */
-  function handleResizePointerCancel(event: PointerEvent) {
-    if (
-      interaction.type !== "resizing-start" &&
-      interaction.type !== "resizing-end"
-    ) {
-      return;
-    }
-
-    const handle = event.currentTarget as HTMLElement;
-
-    interaction = {
-      type: "idle",
-    };
-
-    if (handle.hasPointerCapture(event.pointerId)) {
-      handle.releasePointerCapture(event.pointerId);
+  function releasePointer(pointerId: number) {
+    if (gridElement?.hasPointerCapture(pointerId)) {
+      gridElement.releasePointerCapture(pointerId);
     }
   }
 
@@ -499,15 +460,23 @@
   );
 </script>
 
-<div class="grid" style:height={`${totalHeight}px`}>
+<div
+  bind:this={gridElement}
+  class="grid"
+  style:height={`${totalHeight}px`}
+  onpointermove={handlePointerMove}
+  onpointerup={handlePointerUp}
+  onpointercancel={handlePointerCancel}
+>
+  <!--
+    This button is the empty timeline surface used to
+    create new blocks.
+  -->
   <button
     class="creation-surface"
     type="button"
     aria-label="Create a time block"
     onpointerdown={handleCreationPointerDown}
-    onpointermove={handleCreationPointerMove}
-    onpointerup={handleCreationPointerUp}
-    onpointercancel={handleCreationPointerCancel}
   ></button>
 
   <div class="blocks">
@@ -519,14 +488,8 @@
         height={blockHeight(block)}
         editing={editingBlockId === block.id}
         onpointerdown={(event) => handleBlockPointerDown(event, block)}
-        onpointermove={handleBlockPointerMove}
-        onpointerup={handleBlockPointerUp}
-        onpointercancel={handleBlockPointerCancel}
         onresizestart={(event) => handleResizeStart(event, block)}
         onresizeend={(event) => handleResizeEnd(event, block)}
-        onresizepointermove={handleResizePointerMove}
-        onresizepointerup={handleResizePointerUp}
-        onresizepointercancel={handleResizePointerCancel}
         ontitlechange={(title) => onblocktitlechange?.(block.id, title)}
         oncancel={() => oncancelblock?.(block.id)}
       />
@@ -551,13 +514,17 @@
 <style>
   .grid {
     position: relative;
+
     height: 100%;
 
     user-select: none;
+
+    touch-action: none;
   }
 
   .creation-surface {
     position: absolute;
+
     inset: 0;
 
     width: 100%;
@@ -567,7 +534,6 @@
     padding: 0;
 
     border: 0;
-    border-radius: 0;
 
     background: transparent;
 
@@ -578,6 +544,7 @@
 
   .blocks {
     position: absolute;
+
     inset: 0;
 
     pointer-events: none;
@@ -604,6 +571,7 @@
     padding: 6px 10px;
 
     color: #4338ca;
+
     font-size: 12px;
     font-weight: 500;
   }
