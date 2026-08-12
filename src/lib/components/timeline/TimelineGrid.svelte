@@ -26,8 +26,6 @@
 
     oncancelblock?: (blockId: string) => void;
 
-    onblockmove?: (blockId: string, start: number, end: number) => void;
-
     onblockmoveend?: (
       blockId: string,
       start: number,
@@ -36,7 +34,13 @@
       originalEnd: number,
     ) => void;
 
-    onblockresize?: (blockId: string, start: number, end: number) => void;
+    onblockresizeend?: (
+      blockId: string,
+      start: number,
+      end: number,
+      originalStart: number,
+      originalEnd: number,
+    ) => void;
   }
 
   let {
@@ -47,26 +51,37 @@
     oncreateblock,
     onblocktitlechange,
     oncancelblock,
-
-    onblockmove,
     onblockmoveend,
-    onblockresize,
+    onblockresizeend,
   }: Props = $props();
 
-  const totalMinutes = $derived(config.dayEnd - config.dayStart);
-
-  const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
+  let gridElement = $state<HTMLElement | null>(null);
 
   let interaction = $state<InteractionState>({
     type: "idle",
   });
 
-  let primaryPointerId = $state<number | null>(null);
+  let capturedElement = $state<HTMLElement | null>(null);
 
+  let creationStartMinutes = $state(0);
+
+  let creationCurrentMinutes = $state(0);
+
+  const totalMinutes = $derived(config.dayEnd - config.dayStart);
+
+  const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
+
+  /**
+   * Convert timeline minutes to a block's
+   * vertical position.
+   */
   function blockTop(block: TimeBlock): number {
     return ((block.start - config.dayStart) / 60) * config.pixelsPerHour;
   }
 
+  /**
+   * Convert a block duration into pixels.
+   */
   function blockHeight(block: TimeBlock): number {
     return ((block.end - block.start) / 60) * config.pixelsPerHour;
   }
@@ -75,13 +90,15 @@
    * Convert a pointer's client Y coordinate
    * into timeline minutes.
    *
-   * The event target is the creation button,
-   * which fills the timeline.
+   * This always uses the actual grid's geometry,
+   * regardless of which button started the interaction.
    */
   function pointerToMinutes(event: PointerEvent): number {
-    const target = event.currentTarget as HTMLElement;
+    if (!gridElement) {
+      return config.dayStart;
+    }
 
-    const rect = target.getBoundingClientRect();
+    const rect = gridElement.getBoundingClientRect();
 
     const pixels = event.clientY - rect.top;
 
@@ -95,28 +112,27 @@
   }
 
   /**
-   * Capture the pointer on the element
+   * Start pointer capture on the element
    * that initiated the interaction.
    */
   function capturePointer(event: PointerEvent) {
-    const target = event.currentTarget as HTMLElement;
+    const element = event.currentTarget as HTMLElement;
 
-    primaryPointerId = event.pointerId;
+    capturedElement = element;
 
-    target.setPointerCapture(event.pointerId);
+    element.setPointerCapture(event.pointerId);
   }
 
   /**
-   * Release the active pointer capture.
+   * Release the pointer from whichever
+   * native button originally captured it.
    */
-  function releasePointer(event: PointerEvent) {
-    const target = event.currentTarget as HTMLElement;
-
-    if (target.hasPointerCapture(event.pointerId)) {
-      target.releasePointerCapture(event.pointerId);
+  function releasePointer(pointerId: number) {
+    if (capturedElement?.hasPointerCapture(pointerId)) {
+      capturedElement.releasePointerCapture(pointerId);
     }
 
-    primaryPointerId = null;
+    capturedElement = null;
   }
 
   /**
@@ -131,6 +147,9 @@
 
     const minutes = pointerToMinutes(event);
 
+    creationStartMinutes = minutes;
+    creationCurrentMinutes = minutes;
+
     interaction = {
       type: "creating",
       startMinutes: minutes,
@@ -141,10 +160,14 @@
   }
 
   /**
-   * Begin moving a block.
+   * Start moving an existing block.
    */
-  function handleBlockPointerDown(block: TimeBlock, event: PointerEvent) {
+  function handleBlockPointerDown(event: PointerEvent, block: TimeBlock) {
     if (event.button !== 0) {
+      return;
+    }
+
+    if (editingBlockId === block.id) {
       return;
     }
 
@@ -153,23 +176,29 @@
 
     const currentMinutes = pointerToMinutes(event);
 
+    const offsetMinutes = currentMinutes - block.start;
+
     interaction = {
       type: "moving",
       blockId: block.id,
-      originalStart: block.start,
-      originalEnd: block.end,
+      startMinutes: block.start,
       currentMinutes,
-      offsetMinutes: currentMinutes - block.start,
+      offsetMinutes,
     };
 
     capturePointer(event);
   }
 
   /**
-   * Begin resizing the start of a block.
+   * Start resizing the beginning
+   * of an existing block.
    */
-  function handleResizeStart(block: TimeBlock, event: PointerEvent) {
+  function handleResizeStart(event: PointerEvent, block: TimeBlock) {
     if (event.button !== 0) {
+      return;
+    }
+
+    if (editingBlockId === block.id) {
       return;
     }
 
@@ -188,10 +217,15 @@
   }
 
   /**
-   * Begin resizing the end of a block.
+   * Start resizing the end
+   * of an existing block.
    */
-  function handleResizeEnd(block: TimeBlock, event: PointerEvent) {
+  function handleResizeEnd(event: PointerEvent, block: TimeBlock) {
     if (event.button !== 0) {
+      return;
+    }
+
+    if (editingBlockId === block.id) {
       return;
     }
 
@@ -210,23 +244,28 @@
   }
 
   /**
-   * Handle pointer movement for the
-   * active interaction.
+   * Update the temporary interaction state.
+   *
+   * IMPORTANT:
+   *
+   * We do NOT call back into Timeline.svelte
+   * here. That would update the entire blocks array
+   * on every pointer event and cause the lag we were seeing.
    */
   function handlePointerMove(event: PointerEvent) {
-    if (primaryPointerId !== null && event.pointerId !== primaryPointerId) {
-      return;
-    }
-
     const currentInteraction = interaction;
 
     /*
      * Creating
      */
     if (currentInteraction.type === "creating") {
+      const currentMinutes = pointerToMinutes(event);
+
+      creationCurrentMinutes = currentMinutes;
+
       interaction = {
         ...currentInteraction,
-        currentMinutes: pointerToMinutes(event),
+        currentMinutes,
       };
 
       return;
@@ -236,85 +275,40 @@
      * Moving
      */
     if (currentInteraction.type === "moving") {
-      const block = blocks.find(
-        (candidate) => candidate.id === currentInteraction.blockId,
-      );
-
-      if (!block) {
-        return;
-      }
-
       const currentMinutes = pointerToMinutes(event);
-
-      const range = getMovedBlockRange(
-        block,
-        currentMinutes,
-        currentInteraction.offsetMinutes,
-        config.dayStart,
-        config.dayEnd,
-        config.snapMinutes,
-      );
 
       interaction = {
         ...currentInteraction,
         currentMinutes,
       };
 
-      onblockmove?.(block.id, range.start, range.end);
-
       return;
     }
 
     /*
-     * Resizing start
+     * Resizing the start.
      */
     if (currentInteraction.type === "resizing-start") {
       const currentMinutes = pointerToMinutes(event);
 
-      const start = getResizedStart(
-        currentInteraction.originalEnd,
-        currentMinutes,
-        config.dayStart,
-        config.snapMinutes,
-      );
-
       interaction = {
         ...currentInteraction,
         currentMinutes,
       };
-
-      onblockresize?.(
-        currentInteraction.blockId,
-        start,
-        currentInteraction.originalEnd,
-      );
 
       return;
     }
 
     /*
-     * Resizing end
+     * Resizing the end.
      */
     if (currentInteraction.type === "resizing-end") {
       const currentMinutes = pointerToMinutes(event);
-
-      const end = getResizedEnd(
-        currentInteraction.originalStart,
-        currentMinutes,
-        config.dayEnd,
-        config.snapMinutes,
-      );
 
       interaction = {
         ...currentInteraction,
         currentMinutes,
       };
-
-      onblockresize?.(
-        currentInteraction.blockId,
-        currentInteraction.originalStart,
-        end,
-      );
     }
   }
 
@@ -322,10 +316,6 @@
    * Finish the current interaction.
    */
   function handlePointerUp(event: PointerEvent) {
-    if (primaryPointerId !== null && event.pointerId !== primaryPointerId) {
-      return;
-    }
-
     const currentInteraction = interaction;
 
     /*
@@ -338,11 +328,11 @@
         config.snapMinutes,
       );
 
+      releasePointer(event.pointerId);
+
       interaction = {
         type: "idle",
       };
-
-      releasePointer(event);
 
       if (range.start !== range.end) {
         oncreateblock?.(range);
@@ -355,9 +345,11 @@
      * Finish moving.
      */
     if (currentInteraction.type === "moving") {
-      const block = blocks.find(
-        (candidate) => candidate.id === currentInteraction.blockId,
-      );
+      const blockId = currentInteraction.blockId;
+
+      const originalStart = currentInteraction.startMinutes;
+
+      const block = blocks.find((candidate) => candidate.id === blockId);
 
       if (block) {
         const range = getMovedBlockRange(
@@ -370,25 +362,25 @@
         );
 
         onblockmoveend?.(
-          block.id,
+          blockId,
           range.start,
           range.end,
-          currentInteraction.originalStart,
-          currentInteraction.originalEnd,
+          originalStart,
+          currentInteraction.startMinutes + (block.end - block.start),
         );
       }
+
+      releasePointer(event.pointerId);
 
       interaction = {
         type: "idle",
       };
 
-      releasePointer(event);
-
       return;
     }
 
     /*
-     * Finish resizing start.
+     * Finish resizing the start.
      */
     if (currentInteraction.type === "resizing-start") {
       const start = getResizedStart(
@@ -398,23 +390,25 @@
         config.snapMinutes,
       );
 
-      onblockresize?.(
+      onblockresizeend?.(
         currentInteraction.blockId,
         start,
         currentInteraction.originalEnd,
+        currentInteraction.originalStart,
+        currentInteraction.originalEnd,
       );
+
+      releasePointer(event.pointerId);
 
       interaction = {
         type: "idle",
       };
 
-      releasePointer(event);
-
       return;
     }
 
     /*
-     * Finish resizing end.
+     * Finish resizing the end.
      */
     if (currentInteraction.type === "resizing-end") {
       const end = getResizedEnd(
@@ -424,41 +418,97 @@
         config.snapMinutes,
       );
 
-      onblockresize?.(
+      onblockresizeend?.(
         currentInteraction.blockId,
         currentInteraction.originalStart,
         end,
+        currentInteraction.originalStart,
+        currentInteraction.originalEnd,
       );
+
+      releasePointer(event.pointerId);
 
       interaction = {
         type: "idle",
       };
 
-      releasePointer(event);
-
       return;
     }
-
-    interaction = {
-      type: "idle",
-    };
-
-    releasePointer(event);
   }
 
   /**
    * Cancel the active interaction.
    */
   function handlePointerCancel(event: PointerEvent) {
-    if (primaryPointerId !== null && event.pointerId !== primaryPointerId) {
-      return;
-    }
+    releasePointer(event.pointerId);
 
     interaction = {
       type: "idle",
     };
+  }
 
-    releasePointer(event);
+  /**
+   * Calculate the visual position of
+   * a block during an active interaction.
+   *
+   * This is what makes dragging smooth:
+   * the parent `blocks` array stays untouched
+   * until pointerup.
+   */
+  function getVisualRange(block: TimeBlock): {
+    start: number;
+    end: number;
+  } {
+    const currentInteraction = interaction;
+
+    if (
+      currentInteraction.type === "moving" &&
+      currentInteraction.blockId === block.id
+    ) {
+      return getMovedBlockRange(
+        block,
+        currentInteraction.currentMinutes,
+        currentInteraction.offsetMinutes,
+        config.dayStart,
+        config.dayEnd,
+        config.snapMinutes,
+      );
+    }
+
+    if (
+      currentInteraction.type === "resizing-start" &&
+      currentInteraction.blockId === block.id
+    ) {
+      return {
+        start: getResizedStart(
+          currentInteraction.originalEnd,
+          currentInteraction.currentMinutes,
+          config.dayStart,
+          config.snapMinutes,
+        ),
+        end: currentInteraction.originalEnd,
+      };
+    }
+
+    if (
+      currentInteraction.type === "resizing-end" &&
+      currentInteraction.blockId === block.id
+    ) {
+      return {
+        start: currentInteraction.originalStart,
+        end: getResizedEnd(
+          currentInteraction.originalStart,
+          currentInteraction.currentMinutes,
+          config.dayEnd,
+          config.snapMinutes,
+        ),
+      };
+    }
+
+    return {
+      start: block.start,
+      end: block.end,
+    };
   }
 
   const creationRange = $derived.by(() => {
@@ -496,20 +546,24 @@
   );
 </script>
 
-<div class="grid" style:height={`${totalHeight}px`}>
-  <!--
-    Native button owns the empty timeline interaction.
+<svelte:window
+  onpointermove={handlePointerMove}
+  onpointerup={handlePointerUp}
+  onpointercancel={handlePointerCancel}
+/>
 
-    This is intentionally NOT a div with pointer events.
+<div bind:this={gridElement} class="grid" style:height={`${totalHeight}px`}>
+  <!--
+    Empty timeline surface.
+
+    This is the only element responsible for
+    starting block creation.
   -->
   <button
     class="creation-surface"
     type="button"
-    aria-label="Create time block"
+    aria-label="Create a time block"
     onpointerdown={handleCreationPointerDown}
-    onpointermove={handlePointerMove}
-    onpointerup={handlePointerUp}
-    onpointercancel={handlePointerCancel}
   ></button>
 
   {#if creationRange && creationHeight > 0}
@@ -532,15 +586,23 @@
 
   <div class="blocks">
     {#each blocks as block (block.id)}
+      {@const visualRange = getVisualRange(block)}
+
+      {@const visualBlock = {
+        ...block,
+        start: visualRange.start,
+        end: visualRange.end,
+      }}
+
       <TimelineBlock
-        {block}
+        block={visualBlock}
         {config}
-        top={blockTop(block)}
-        height={blockHeight(block)}
+        top={blockTop(visualBlock)}
+        height={blockHeight(visualBlock)}
         editing={editingBlockId === block.id}
-        onpointerdown={(event) => handleBlockPointerDown(block, event)}
-        onresizestart={(event) => handleResizeStart(block, event)}
-        onresizeend={(event) => handleResizeEnd(block, event)}
+        onpointerdown={(event) => handleBlockPointerDown(event, block)}
+        onresizestart={(event) => handleResizeStart(event, block)}
+        onresizeend={(event) => handleResizeEnd(event, block)}
         ontitlechange={(title) => onblocktitlechange?.(block.id, title)}
         oncancel={() => oncancelblock?.(block.id)}
       />
@@ -581,8 +643,17 @@
 
   .creation-surface:focus-visible {
     outline: 2px solid #6366f1;
-
     outline-offset: -2px;
+  }
+
+  .blocks {
+    position: absolute;
+
+    inset: 0;
+
+    pointer-events: none;
+
+    z-index: 3;
   }
 
   .creation-preview {
@@ -614,15 +685,5 @@
     font-weight: 500;
 
     z-index: 2;
-  }
-
-  .blocks {
-    position: absolute;
-
-    inset: 0;
-
-    pointer-events: none;
-
-    z-index: 3;
   }
 </style>

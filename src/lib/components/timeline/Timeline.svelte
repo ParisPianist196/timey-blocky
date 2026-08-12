@@ -4,6 +4,7 @@
   import { createRange, getRanges, updateRange } from "@db/ranges";
 
   import { getCurrentUser } from "@lib/db/auth";
+
   import { randomColor } from "@lib/colors";
 
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
@@ -22,10 +23,12 @@
   let editingBlockId = $state<string | null>(null);
 
   let loading = $state(true);
+
   let error = $state<string | null>(null);
 
   /**
-   * Load the user's existing timeline ranges.
+   * Load the user's existing
+   * timeline ranges.
    */
   async function loadRanges() {
     loading = true;
@@ -58,8 +61,8 @@
   }
 
   /**
-   * Convert a database timestamp into minutes
-   * since midnight.
+   * Convert a database timestamp
+   * into minutes since midnight.
    */
   function timeStringToMinutes(timestamp: string): number {
     const date = new Date(timestamp);
@@ -68,12 +71,14 @@
   }
 
   /**
-   * Convert timeline minutes into a database timestamp.
+   * Convert timeline minutes
+   * into a database timestamp.
    */
   function minutesToTimestamp(minutes: number): string {
     const date = new Date();
 
     const hours = Math.floor(minutes / 60);
+
     const minutesPart = minutes % 60;
 
     date.setHours(hours, minutesPart, 0, 0);
@@ -82,14 +87,18 @@
   }
 
   /**
-   * Add a newly-created block locally.
+   * Add a newly-created block
+   * locally.
    */
   function handleCreateBlock(range: { start: number; end: number }) {
     const block: TimeBlock = {
       id: crypto.randomUUID(),
+
       start: range.start,
       end: range.end,
+
       color: randomColor(),
+
       label: "",
     };
 
@@ -110,6 +119,7 @@
 
     if (!title) {
       handleCancelBlock(blockId);
+
       return;
     }
 
@@ -163,11 +173,19 @@
   }
 
   /**
-   * Update a block locally while it is being moved.
-   *
-   * This is intentionally NOT persisted here.
+   * Commit the final position
+   * of a moved block.
    */
-  function handleBlockMove(blockId: string, start: number, end: number) {
+  async function handleBlockMoveEnd(
+    blockId: string,
+    start: number,
+    end: number,
+    originalStart: number,
+    originalEnd: number,
+  ) {
+    /*
+     * Update the UI immediately.
+     */
     blocks = blocks.map((block) =>
       block.id === blockId
         ? {
@@ -177,19 +195,7 @@
           }
         : block,
     );
-  }
 
-  /**
-   * Persist the final position of a block after
-   * the move interaction finishes.
-   */
-  async function handleBlockMoveEnd(
-    blockId: string,
-    start: number,
-    end: number,
-    originalStart: number,
-    originalEnd: number,
-  ) {
     try {
       await updateRange(blockId, {
         start: minutesToTimestamp(start),
@@ -199,8 +205,7 @@
       console.error("Failed to save moved timeline range:", err);
 
       /*
-       * Revert the optimistic UI update if the
-       * database update fails.
+       * Revert if persistence fails.
        */
       blocks = blocks.map((block) =>
         block.id === blockId
@@ -220,12 +225,19 @@
   }
 
   /**
-   * Update the position of a block locally after
-   * resizing.
-   *
-   * Persistence will be added next.
+   * Commit the final size of
+   * a resized block.
    */
-  function handleBlockResize(blockId: string, start: number, end: number) {
+  async function handleBlockResizeEnd(
+    blockId: string,
+    start: number,
+    end: number,
+    originalStart: number,
+    originalEnd: number,
+  ) {
+    /*
+     * Update the UI immediately.
+     */
     blocks = blocks.map((block) =>
       block.id === blockId
         ? {
@@ -235,6 +247,33 @@
           }
         : block,
     );
+
+    try {
+      await updateRange(blockId, {
+        start: minutesToTimestamp(start),
+        end: minutesToTimestamp(end),
+      });
+    } catch (err) {
+      console.error("Failed to save resized timeline range:", err);
+
+      /*
+       * Revert if persistence fails.
+       */
+      blocks = blocks.map((block) =>
+        block.id === blockId
+          ? {
+              ...block,
+              start: originalStart,
+              end: originalEnd,
+            }
+          : block,
+      );
+
+      error =
+        err instanceof Error
+          ? err.message
+          : "Failed to save resized timeline block.";
+    }
   }
 
   loadRanges();
@@ -258,9 +297,8 @@
         oncreateblock={handleCreateBlock}
         onblocktitlechange={handleBlockTitleChange}
         oncancelblock={handleCancelBlock}
-        onblockmove={handleBlockMove}
         onblockmoveend={handleBlockMoveEnd}
-        onblockresize={handleBlockResize}
+        onblockresizeend={handleBlockResizeEnd}
       />
     </div>
   {/if}
@@ -269,9 +307,11 @@
 <style>
   .timeline {
     max-width: 300px;
+
     width: 100%;
 
     min-height: 600px;
+
     height: 100%;
 
     overflow-y: auto;
@@ -285,7 +325,9 @@
     inset: 0;
 
     display: flex;
+
     align-items: center;
+
     justify-content: center;
 
     color: #71717a;

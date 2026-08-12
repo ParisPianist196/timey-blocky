@@ -1,18 +1,25 @@
 <script lang="ts">
+  import { contrastText } from "@lib/colors";
+
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
 
   interface Props {
     block: TimeBlock;
     config: TimelineConfig;
+
     top: number;
     height: number;
+
     editing?: boolean;
 
     onpointerdown?: (event: PointerEvent) => void;
+
     onresizestart?: (event: PointerEvent) => void;
+
     onresizeend?: (event: PointerEvent) => void;
 
     ontitlechange?: (title: string) => void;
+
     oncancel?: () => void;
   }
 
@@ -21,6 +28,7 @@
     config,
     top,
     height,
+
     editing = false,
 
     onpointerdown,
@@ -31,42 +39,88 @@
     oncancel,
   }: Props = $props();
 
-  let title = $state(block.label);
   let titleInput = $state<HTMLInputElement | null>(null);
+
+  let title = $state(block.label);
+
+  let finished = $state(false);
 
   let hoveredResizeHandle = $state<"start" | "end" | null>(null);
 
-  $effect(() => {
-    if (editing && titleInput) {
-      titleInput.focus();
-      titleInput.select();
-    }
-  });
+  /**
+   * Determine the best text color
+   * for the block background.
+   */
+  const textColor = $derived(contrastText(block.color));
 
+  /**
+   * Focus the title input whenever
+   * the block enters editing mode.
+   */
   $effect(() => {
     if (!editing) {
-      title = block.label;
+      return;
     }
+
+    title = block.label;
+    finished = false;
+
+    requestAnimationFrame(() => {
+      titleInput?.focus();
+      titleInput?.select();
+    });
   });
 
+  /**
+   * Save the block title.
+   */
   function commitTitle() {
+    if (finished) {
+      return;
+    }
+
+    finished = true;
+
     ontitlechange?.(title.trim());
   }
 
+  /**
+   * Cancel block creation.
+   */
+  function cancelTitle() {
+    if (finished) {
+      return;
+    }
+
+    finished = true;
+
+    oncancel?.();
+  }
+
+  /**
+   * Handle keyboard interaction
+   * while editing.
+   */
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Enter") {
       event.preventDefault();
+
       commitTitle();
+
       return;
     }
 
     if (event.key === "Escape") {
       event.preventDefault();
-      oncancel?.();
+
+      cancelTitle();
     }
   }
 
-  function handleBlockPointerDown(event: PointerEvent) {
+  /**
+   * Begin moving the block.
+   */
+  function handlePointerDown(event: PointerEvent) {
     if (editing) {
       return;
     }
@@ -74,37 +128,51 @@
     onpointerdown?.(event);
   }
 
-  function handleResizeStartPointerDown(event: PointerEvent) {
+  /**
+   * Begin resizing the start.
+   */
+  function handleResizeStart(event: PointerEvent) {
+    if (editing) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
+
+    hoveredResizeHandle = "start";
 
     onresizestart?.(event);
   }
 
-  function handleResizeEndPointerDown(event: PointerEvent) {
+  /**
+   * Begin resizing the end.
+   */
+  function handleResizeEnd(event: PointerEvent) {
+    if (editing) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
+
+    hoveredResizeHandle = "end";
 
     onresizeend?.(event);
   }
 </script>
 
 <div
-  class="block-container"
+  class="block-wrapper"
   data-timeline-block
   style:top={`${top}px`}
   style:height={`${height}px`}
 >
-  <!-- Main movable block -->
-  <button
-    class="block"
-    class:editing
-    type="button"
-    aria-label={block.label || "Time block"}
-    disabled={editing}
-    onpointerdown={handleBlockPointerDown}
-  >
-    {#if editing}
+  {#if editing}
+    <div
+      class="block editing"
+      style:background-color={block.color}
+      style:color={textColor}
+    >
       <input
         bind:this={titleInput}
         class="title-input"
@@ -112,38 +180,52 @@
         bind:value={title}
         placeholder="What are you doing?"
         aria-label="Time block title"
-        onpointerdown={(event) => event.stopPropagation()}
         onkeydown={handleKeydown}
         onblur={commitTitle}
       />
-    {:else}
+    </div>
+  {:else}
+    <!--
+      Main block interaction.
+
+      Native button:
+      - move
+      - focus
+      - keyboard accessibility
+    -->
+    <button
+      class="block block-button"
+      type="button"
+      style:background-color={block.color}
+      style:color={textColor}
+      aria-label={`Move ${block.label || "time block"}`}
+      onpointerdown={handlePointerDown}
+    >
       <span class="label">
         {block.label}
       </span>
-    {/if}
-  </button>
+    </button>
 
-  {#if !editing}
-    <!-- Start resize handle -->
+    <!-- Top resize handle -->
     <button
       class:visible={hoveredResizeHandle === "start"}
       class="resize-handle resize-handle-start"
       type="button"
       aria-label={`Resize start of ${block.label || "time block"}`}
-      onpointerdown={handleResizeStartPointerDown}
+      onpointerdown={handleResizeStart}
       onpointerenter={() => (hoveredResizeHandle = "start")}
       onpointerleave={() => (hoveredResizeHandle = null)}
     >
       <span class="handle-grip"></span>
     </button>
 
-    <!-- End resize handle -->
+    <!-- Bottom resize handle -->
     <button
       class:visible={hoveredResizeHandle === "end"}
       class="resize-handle resize-handle-end"
       type="button"
       aria-label={`Resize end of ${block.label || "time block"}`}
-      onpointerdown={handleResizeEndPointerDown}
+      onpointerdown={handleResizeEnd}
       onpointerenter={() => (hoveredResizeHandle = "end")}
       onpointerleave={() => (hoveredResizeHandle = null)}
     >
@@ -153,18 +235,19 @@
 </div>
 
 <style>
-  .block-container {
+  .block-wrapper {
     position: absolute;
 
     left: 48px;
     right: 0;
 
-    overflow: visible;
-
     pointer-events: none;
   }
 
-  .block {
+  /*
+   * Main draggable block.
+   */
+  .block-button {
     position: absolute;
 
     inset: 0;
@@ -174,111 +257,137 @@
 
     box-sizing: border-box;
 
+    margin: 0;
+    padding: 8px 12px;
+
     border: 0;
+
     border-radius: 8px;
 
-    padding: 8px 10px;
-
-    background: inherit;
-
-    color: var(--block-text-color, white);
+    font: inherit;
+    font-weight: 500;
 
     text-align: left;
 
     cursor: grab;
 
-    user-select: none;
+    pointer-events: auto;
 
     touch-action: none;
 
-    pointer-events: auto;
-
-    transition:
-      box-shadow 100ms ease,
-      transform 100ms ease;
+    /*
+     * Don't animate position/background while dragging.
+     *
+     * This is important for responsiveness.
+     */
+    transition: filter 120ms ease;
   }
 
-  .block:hover {
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.15);
+  .block-button:hover {
+    filter: brightness(1.05);
   }
 
-  .block:active {
+  .block-button:active {
     cursor: grabbing;
   }
 
-  .block:disabled {
-    cursor: default;
+  .block-button:focus-visible {
+    outline: 2px solid currentColor;
+
+    outline-offset: 2px;
   }
 
   .label {
+    pointer-events: none;
+
     display: block;
 
     overflow: hidden;
 
     text-overflow: ellipsis;
-    white-space: nowrap;
 
-    font-size: 12px;
-    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /*
+   * Editing state.
+   */
+  .block.editing {
+    position: absolute;
+
+    inset: 0;
+
+    box-sizing: border-box;
+
+    padding: 8px 12px;
+
+    border-radius: 8px;
+
+    font-weight: 500;
+
+    pointer-events: auto;
+
+    touch-action: auto;
   }
 
   .title-input {
-    display: block;
-
     width: 100%;
 
     box-sizing: border-box;
 
-    border: 1px solid rgb(255 255 255 / 0.7);
-    border-radius: 4px;
+    padding: 6px 8px;
 
-    padding: 4px 6px;
+    border: 1px solid rgb(255 255 255 / 0.7);
+
+    border-radius: 4px;
 
     background: rgb(255 255 255 / 0.9);
 
     color: #111827;
 
     font: inherit;
-    font-size: 12px;
 
     outline: none;
-
-    pointer-events: auto;
   }
 
   .title-input:focus {
     border-color: white;
   }
 
+  /*
+   * Resize handles sit above
+   * the block button.
+   */
   .resize-handle {
     position: absolute;
 
-    left: 50%;
+    left: 0;
+    right: 0;
 
-    width: 56px;
+    width: 100%;
     height: 14px;
 
+    margin: 0;
     padding: 0;
 
     border: 0;
-    border-radius: 6px;
 
-    transform: translateX(-50%);
+    appearance: none;
 
     background: transparent;
 
     cursor: ns-resize;
 
-    opacity: 0;
-
-    z-index: 10;
-
     pointer-events: auto;
 
     touch-action: none;
+
+    opacity: 0;
+
+    z-index: 10;
   }
 
-  .block-container:hover .resize-handle,
+  .block-wrapper:hover .resize-handle,
   .resize-handle.visible {
     opacity: 1;
   }
@@ -302,11 +411,11 @@
     width: 32px;
     height: 4px;
 
-    border-radius: 999px;
-
     transform: translate(-50%, -50%);
 
-    background: rgb(255 255 255 / 0.9);
+    border-radius: 999px;
+
+    background: currentColor;
 
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
   }

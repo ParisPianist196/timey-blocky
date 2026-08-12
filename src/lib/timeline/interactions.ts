@@ -10,6 +10,7 @@ export type InteractionState =
   | {
       type: "moving";
       blockId: string;
+      startMinutes: number;
       originalStart: number;
       originalEnd: number;
       currentMinutes: number;
