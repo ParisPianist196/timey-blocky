@@ -1,9 +1,9 @@
 <script lang="ts">
   import TimelineGrid from "@components/timeline/TimelineGrid.svelte";
 
-  import { getRanges } from "@db/ranges";
-  import { getCurrentUser } from "@lib/db/auth";
+  import { createRange, getRanges, updateRange } from "@db/ranges";
 
+  import { getCurrentUser } from "@lib/db/auth";
   import { randomColor } from "@lib/colors";
 
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
@@ -24,6 +24,9 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
+  /**
+   * Load the user's existing timeline ranges.
+   */
   async function loadRanges() {
     loading = true;
     error = null;
@@ -55,8 +58,8 @@
   }
 
   /**
-   * Convert a database time value such as "10:30:00"
-   * into minutes since midnight.
+   * Convert a database timestamp into minutes
+   * since midnight.
    */
   function timeStringToMinutes(timestamp: string): number {
     const date = new Date(timestamp);
@@ -65,8 +68,21 @@
   }
 
   /**
-   * Add a newly-created block to the local timeline
-   * and immediately put it into title-editing mode.
+   * Convert timeline minutes into a database timestamp.
+   */
+  function minutesToTimestamp(minutes: number): string {
+    const date = new Date();
+
+    const hours = Math.floor(minutes / 60);
+    const minutesPart = minutes % 60;
+
+    date.setHours(hours, minutesPart, 0, 0);
+
+    return date.toISOString();
+  }
+
+  /**
+   * Add a newly-created block locally.
    */
   function handleCreateBlock(range: { start: number; end: number }) {
     const block: TimeBlock = {
@@ -83,23 +99,62 @@
   }
 
   /**
-   * Update the title of a block currently being edited.
+   * Save a newly-created block.
    */
-  function handleBlockTitleChange(blockId: string, title: string) {
-    blocks = blocks.map((block) =>
-      block.id === blockId
-        ? {
-            ...block,
-            label: title,
-          }
-        : block,
-    );
+  async function handleBlockTitleChange(blockId: string, title: string) {
+    const block = blocks.find((candidate) => candidate.id === blockId);
 
-    editingBlockId = null;
+    if (!block) {
+      return;
+    }
+
+    if (!title) {
+      handleCancelBlock(blockId);
+      return;
+    }
+
+    const user = getCurrentUser();
+
+    if (!user) {
+      error = "You must be signed in to save a timeline block.";
+
+      handleCancelBlock(blockId);
+
+      return;
+    }
+
+    try {
+      const range = await createRange({
+        start: minutesToTimestamp(block.start),
+        end: minutesToTimestamp(block.end),
+        color: block.color,
+        label: title,
+        owner_id: user.id,
+      });
+
+      blocks = blocks.map((candidate) =>
+        candidate.id === blockId
+          ? {
+              ...candidate,
+              id: range.id,
+              label: range.label,
+            }
+          : candidate,
+      );
+
+      editingBlockId = null;
+    } catch (err) {
+      console.error("Failed to create timeline range:", err);
+
+      error =
+        err instanceof Error ? err.message : "Failed to create timeline block.";
+
+      handleCancelBlock(blockId);
+    }
   }
 
   /**
-   * Cancel creation of a block currently being edited.
+   * Cancel creation of a block.
    */
   function handleCancelBlock(blockId: string) {
     blocks = blocks.filter((block) => block.id !== blockId);
@@ -108,7 +163,9 @@
   }
 
   /**
-   * Update the position of a block after a move.
+   * Update a block locally while it is being moved.
+   *
+   * This is intentionally NOT persisted here.
    */
   function handleBlockMove(blockId: string, start: number, end: number) {
     blocks = blocks.map((block) =>
@@ -123,7 +180,50 @@
   }
 
   /**
-   * Update the position of a block after resizing.
+   * Persist the final position of a block after
+   * the move interaction finishes.
+   */
+  async function handleBlockMoveEnd(
+    blockId: string,
+    start: number,
+    end: number,
+    originalStart: number,
+    originalEnd: number,
+  ) {
+    try {
+      await updateRange(blockId, {
+        start: minutesToTimestamp(start),
+        end: minutesToTimestamp(end),
+      });
+    } catch (err) {
+      console.error("Failed to save moved timeline range:", err);
+
+      /*
+       * Revert the optimistic UI update if the
+       * database update fails.
+       */
+      blocks = blocks.map((block) =>
+        block.id === blockId
+          ? {
+              ...block,
+              start: originalStart,
+              end: originalEnd,
+            }
+          : block,
+      );
+
+      error =
+        err instanceof Error
+          ? err.message
+          : "Failed to save moved timeline block.";
+    }
+  }
+
+  /**
+   * Update the position of a block locally after
+   * resizing.
+   *
+   * Persistence will be added next.
    */
   function handleBlockResize(blockId: string, start: number, end: number) {
     blocks = blocks.map((block) =>
@@ -159,6 +259,7 @@
         onblocktitlechange={handleBlockTitleChange}
         oncancelblock={handleCancelBlock}
         onblockmove={handleBlockMove}
+        onblockmoveend={handleBlockMoveEnd}
         onblockresize={handleBlockResize}
       />
     </div>

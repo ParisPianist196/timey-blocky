@@ -1,9 +1,7 @@
 import type { TimeBlock } from "./types";
 
 export type InteractionState =
-  | {
-      type: "idle";
-    }
+  | { type: "idle" }
   | {
       type: "creating";
       startMinutes: number;
@@ -12,7 +10,8 @@ export type InteractionState =
   | {
       type: "moving";
       blockId: string;
-      startMinutes: number;
+      originalStart: number;
+      originalEnd: number;
       currentMinutes: number;
       offsetMinutes: number;
     }
@@ -48,9 +47,6 @@ export type DragSelection = {
 
 /**
  * Convert a vertical pixel position into minutes.
- *
- * `dayStart` is the first visible minute of the timeline.
- * `pixelsPerHour` controls the visual zoom level.
  */
 export function pixelsToMinutes(
   pixels: number,
@@ -73,10 +69,6 @@ export function minutesToPixels(
 
 /**
  * Snap a time to the nearest interval.
- *
- * Example:
- *   snapMinutes(527, 15) → 525
- *   snapMinutes(533, 15) → 540
  */
 export function snapMinutes(minutes: number, interval = 15): number {
   return Math.round(minutes / interval) * interval;
@@ -94,13 +86,7 @@ export function clampMinutes(
 }
 
 /**
- * Get the normalized range regardless of drag direction.
- *
- * Dragging from 10:00 → 11:00:
- *   { start: 600, end: 660 }
- *
- * Dragging from 11:00 → 10:00:
- *   { start: 600, end: 660 }
+ * Normalize a range regardless of drag direction.
  */
 export function normalizeRange(start: number, end: number): DragSelection {
   return {
@@ -118,6 +104,7 @@ export function getCreationRange(
   snapInterval = 15,
 ): DragSelection {
   const start = snapMinutes(startMinutes, snapInterval);
+
   const end = snapMinutes(currentMinutes, snapInterval);
 
   return normalizeRange(start, end);
@@ -177,9 +164,79 @@ export function getResizedEnd(
 }
 
 /**
- * Calculate the distance between two pointers.
+ * Calculate the live range represented by an interaction.
  *
- * Used for pinch-to-zoom.
+ * This is intentionally separate from persistence/state updates.
+ * The UI can use this during pointer movement so that dragging
+ * remains visually immediate.
+ */
+export function getInteractionRange(
+  interaction: InteractionState,
+  blocks: TimeBlock[],
+  dayStart: number,
+  dayEnd: number,
+  snapInterval = 15,
+): DragSelection | null {
+  if (interaction.type === "creating") {
+    return getCreationRange(
+      interaction.startMinutes,
+      interaction.currentMinutes,
+      snapInterval,
+    );
+  }
+
+  if (interaction.type === "moving") {
+    const block = blocks.find(
+      (candidate) => candidate.id === interaction.blockId,
+    );
+
+    if (!block) {
+      return null;
+    }
+
+    return getMovedBlockRange(
+      {
+        ...block,
+        start: interaction.originalStart,
+        end: interaction.originalEnd,
+      },
+      interaction.currentMinutes,
+      interaction.offsetMinutes,
+      dayStart,
+      dayEnd,
+      snapInterval,
+    );
+  }
+
+  if (interaction.type === "resizing-start") {
+    return {
+      start: getResizedStart(
+        interaction.originalEnd,
+        interaction.currentMinutes,
+        dayStart,
+        snapInterval,
+      ),
+      end: interaction.originalEnd,
+    };
+  }
+
+  if (interaction.type === "resizing-end") {
+    return {
+      start: interaction.originalStart,
+      end: getResizedEnd(
+        interaction.originalStart,
+        interaction.currentMinutes,
+        dayEnd,
+        snapInterval,
+      ),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Calculate the distance between two pointers.
  */
 export function pointerDistance(
   first: PointerPosition,
