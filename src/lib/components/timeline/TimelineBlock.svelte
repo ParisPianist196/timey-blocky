@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { contrastText } from "@lib/colors";
+
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
 
   interface Props {
@@ -39,6 +41,16 @@
 
   let hoveredResizeHandle = $state<"start" | "end" | null>(null);
 
+  /**
+   * Determine the best text color for the block's
+   * background color.
+   */
+  const textColor = $derived(contrastText(block.color));
+
+  /**
+   * Focus the title input whenever a newly-created
+   * block enters editing mode.
+   */
   $effect(() => {
     if (editing) {
       title = block.label;
@@ -51,6 +63,9 @@
     }
   });
 
+  /**
+   * Save the block title.
+   */
   function commitTitle() {
     if (finished) {
       return;
@@ -61,6 +76,9 @@
     ontitlechange?.(title.trim());
   }
 
+  /**
+   * Cancel creation of the block.
+   */
   function cancelTitle() {
     if (finished) {
       return;
@@ -71,19 +89,28 @@
     oncancel?.();
   }
 
+  /**
+   * Handle keyboard interaction while editing.
+   */
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Enter") {
       event.preventDefault();
+
       commitTitle();
+
       return;
     }
 
     if (event.key === "Escape") {
       event.preventDefault();
+
       cancelTitle();
     }
   }
 
+  /**
+   * Begin moving the block.
+   */
   function handlePointerDown(event: PointerEvent) {
     if (editing) {
       return;
@@ -92,6 +119,9 @@
     onpointerdown?.(event);
   }
 
+  /**
+   * Begin resizing the start of the block.
+   */
   function handleResizeStart(event: PointerEvent) {
     if (editing) {
       return;
@@ -105,6 +135,9 @@
     onresizestart?.(event);
   }
 
+  /**
+   * Begin resizing the end of the block.
+   */
   function handleResizeEnd(event: PointerEvent) {
     if (editing) {
       return;
@@ -120,14 +153,47 @@
 </script>
 
 <div
-  class="block"
+  class="block-wrapper"
   data-timeline-block
   style:top={`${top}px`}
   style:height={`${height}px`}
-  style:background-color={block.color}
-  onpointerdown={handlePointerDown}
 >
-  {#if !editing}
+  {#if editing}
+    <div
+      class="block editing"
+      style:background-color={block.color}
+      style:color={textColor}
+    >
+      <input
+        bind:this={titleInput}
+        class="title-input"
+        type="text"
+        bind:value={title}
+        placeholder="What are you doing?"
+        aria-label="Time block title"
+        onkeydown={handleKeydown}
+        onblur={commitTitle}
+      />
+    </div>
+  {:else}
+    <!--
+      The block itself is a native button because it
+      represents the primary interactive surface for
+      moving the block.
+    -->
+    <button
+      class="block block-button"
+      type="button"
+      style:background-color={block.color}
+      style:color={textColor}
+      aria-label={`Move ${block.label || "time block"}`}
+      onpointerdown={handlePointerDown}
+    >
+      <span class="label">
+        {block.label}
+      </span>
+    </button>
+
     <!-- Top resize handle -->
     <button
       class:visible={hoveredResizeHandle === "start"}
@@ -154,31 +220,77 @@
       <span class="handle-grip"></span>
     </button>
   {/if}
-
-  {#if editing}
-    <input
-      bind:this={titleInput}
-      class="title-input"
-      type="text"
-      bind:value={title}
-      placeholder="What are you doing?"
-      aria-label="Time block title"
-      onkeydown={handleKeydown}
-      onblur={commitTitle}
-    />
-  {:else}
-    <span class="label">
-      {block.label}
-    </span>
-  {/if}
 </div>
 
 <style>
-  .block {
+  .block-wrapper {
     position: absolute;
 
     left: 48px;
     right: 0;
+
+    pointer-events: none;
+  }
+
+  /*
+   * The actual interactive block.
+   */
+  .block-button {
+    position: absolute;
+
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+
+    box-sizing: border-box;
+
+    margin: 0;
+    padding: 8px 12px;
+
+    border: 0;
+    border-radius: 8px;
+
+    font: inherit;
+    font-weight: 500;
+
+    text-align: left;
+
+    cursor: grab;
+
+    pointer-events: auto;
+
+    touch-action: none;
+
+    transition:
+      filter 120ms ease,
+      transform 120ms ease;
+  }
+
+  .block-button:hover {
+    filter: brightness(1.05);
+  }
+
+  .block-button:active {
+    cursor: grabbing;
+  }
+
+  .block-button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+
+  .label {
+    pointer-events: none;
+  }
+
+  /*
+   * Editing isn't interactive as a draggable block.
+   */
+  .block.editing {
+    position: absolute;
+
+    inset: 0;
 
     box-sizing: border-box;
 
@@ -186,28 +298,15 @@
 
     border-radius: 8px;
 
+    font-weight: 500;
+
     pointer-events: auto;
 
-    color: white;
-
-    cursor: grab;
-
-    touch-action: none;
-  }
-
-  .block:active {
-    cursor: grabbing;
-  }
-
-  .label {
-    font-weight: 500;
+    touch-action: auto;
   }
 
   /*
-   * The handles are deliberately inside the block.
-   *
-   * The visible grip is only 4px tall, but the actual
-   * clickable area is 14px tall.
+   * Resize handles sit above the block button.
    */
   .resize-handle {
     position: absolute;
@@ -228,6 +327,8 @@
     background: transparent;
 
     cursor: ns-resize;
+
+    pointer-events: auto;
 
     z-index: 10;
 
@@ -254,7 +355,7 @@
 
     border-radius: 999px;
 
-    background: white;
+    background: currentColor;
 
     opacity: 0.35;
 
@@ -279,7 +380,7 @@
   }
 
   .resize-handle:focus-visible {
-    outline: 2px solid white;
+    outline: 2px solid currentColor;
     outline-offset: -2px;
   }
 
@@ -308,6 +409,6 @@
 
   .title-input::placeholder {
     color: currentColor;
-    opacity: 0.7;
+    opacity: 0.65;
   }
 </style>

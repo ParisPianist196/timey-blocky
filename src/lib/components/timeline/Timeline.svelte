@@ -4,6 +4,8 @@
   import { getRanges } from "@db/ranges";
   import { getCurrentUser } from "@lib/db/auth";
 
+  import { randomColor } from "@lib/colors";
+
   import type { TimeBlock, TimelineConfig } from "@timeline/types";
 
   import TimelineRuler from "./TimelineRuler.svelte";
@@ -15,23 +17,8 @@
     pixelsPerHour: 80,
   };
 
-  const blockColors = [
-    "#ef4444",
-    "#f97316",
-    "#f59e0b",
-    "#84cc16",
-    "#22c55e",
-    "#14b8a6",
-    "#06b6d4",
-    "#3b82f6",
-    "#6366f1",
-    "#8b5cf6",
-    "#a855f7",
-    "#ec4899",
-    "#f43f5e",
-  ];
-
   let blocks: TimeBlock[] = $state([]);
+
   let editingBlockId = $state<string | null>(null);
 
   let loading = $state(true);
@@ -68,15 +55,6 @@
   }
 
   /**
-   * Return a random color from the timeline block palette.
-   */
-  function getRandomBlockColor(): string {
-    const index = Math.floor(Math.random() * blockColors.length);
-
-    return blockColors[index];
-  }
-
-  /**
    * Convert a database time value such as "10:30:00"
    * into minutes since midnight.
    */
@@ -87,19 +65,20 @@
   }
 
   /**
-   * Add a newly-created block to the local timeline and
-   * immediately put it into title-editing mode.
+   * Add a newly-created block to the local timeline
+   * and immediately put it into title-editing mode.
    */
   function handleCreateBlock(range: { start: number; end: number }) {
     const block: TimeBlock = {
       id: crypto.randomUUID(),
       start: range.start,
       end: range.end,
-      color: getRandomBlockColor(),
+      color: randomColor(),
       label: "",
     };
 
     blocks = [...blocks, block];
+
     editingBlockId = block.id;
   }
 
@@ -108,7 +87,12 @@
    */
   function handleBlockTitleChange(blockId: string, title: string) {
     blocks = blocks.map((block) =>
-      block.id === blockId ? { ...block, label: title } : block,
+      block.id === blockId
+        ? {
+            ...block,
+            label: title,
+          }
+        : block,
     );
 
     editingBlockId = null;
@@ -119,6 +103,7 @@
    */
   function handleCancelBlock(blockId: string) {
     blocks = blocks.filter((block) => block.id !== blockId);
+
     editingBlockId = null;
   }
 
@@ -137,7 +122,9 @@
     );
   }
 
-  loadRanges();
+  /**
+   * Update the position of a block after resizing.
+   */
   function handleBlockResize(blockId: string, start: number, end: number) {
     blocks = blocks.map((block) =>
       block.id === blockId
@@ -149,6 +136,8 @@
         : block,
     );
   }
+
+  loadRanges();
 </script>
 
 <div class="timeline">
@@ -180,14 +169,18 @@
   .timeline {
     max-width: 300px;
     width: 100%;
+
     min-height: 600px;
     height: 100%;
+
     overflow-y: auto;
+
     padding: 12px;
   }
 
   .status {
     position: absolute;
+
     inset: 0;
 
     display: flex;
