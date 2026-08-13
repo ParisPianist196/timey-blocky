@@ -1,41 +1,5 @@
 import type { TimeBlock } from "./types";
 
-export type InteractionState =
-  | { type: "idle" }
-  | {
-      type: "creating";
-      startMinutes: number;
-      currentMinutes: number;
-    }
-  | {
-      type: "moving";
-      blockId: string;
-      startMinutes: number;
-      originalStart: number;
-      originalEnd: number;
-      currentMinutes: number;
-      offsetMinutes: number;
-    }
-  | {
-      type: "resizing-start";
-      blockId: string;
-      originalStart: number;
-      originalEnd: number;
-      currentMinutes: number;
-    }
-  | {
-      type: "resizing-end";
-      blockId: string;
-      originalStart: number;
-      originalEnd: number;
-      currentMinutes: number;
-    }
-  | {
-      type: "zooming";
-      startDistance: number;
-      startPixelsPerHour: number;
-    };
-
 export type PointerPosition = {
   x: number;
   y: number;
@@ -162,78 +126,6 @@ export function getResizedEnd(
   const snapped = snapMinutes(currentMinutes, snapInterval);
 
   return clampMinutes(snapped, originalStart + minimumDuration, dayEnd);
-}
-
-/**
- * Calculate the live range represented by an interaction.
- *
- * This is intentionally separate from persistence/state updates.
- * The UI can use this during pointer movement so that dragging
- * remains visually immediate.
- */
-export function getInteractionRange(
-  interaction: InteractionState,
-  blocks: TimeBlock[],
-  dayStart: number,
-  dayEnd: number,
-  snapInterval = 15,
-): DragSelection | null {
-  if (interaction.type === "creating") {
-    return getCreationRange(
-      interaction.startMinutes,
-      interaction.currentMinutes,
-      snapInterval,
-    );
-  }
-
-  if (interaction.type === "moving") {
-    const block = blocks.find(
-      (candidate) => candidate.id === interaction.blockId,
-    );
-
-    if (!block) {
-      return null;
-    }
-
-    return getMovedBlockRange(
-      {
-        ...block,
-        start: interaction.originalStart,
-        end: interaction.originalEnd,
-      },
-      interaction.currentMinutes,
-      interaction.offsetMinutes,
-      dayStart,
-      dayEnd,
-      snapInterval,
-    );
-  }
-
-  if (interaction.type === "resizing-start") {
-    return {
-      start: getResizedStart(
-        interaction.originalEnd,
-        interaction.currentMinutes,
-        dayStart,
-        snapInterval,
-      ),
-      end: interaction.originalEnd,
-    };
-  }
-
-  if (interaction.type === "resizing-end") {
-    return {
-      start: interaction.originalStart,
-      end: getResizedEnd(
-        interaction.originalStart,
-        interaction.currentMinutes,
-        dayEnd,
-        snapInterval,
-      ),
-    };
-  }
-
-  return null;
 }
 
 /**

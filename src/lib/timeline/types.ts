@@ -6,6 +6,15 @@ export interface TimeBlock {
   label: string;
 }
 
+export interface CreatingBlock {
+  start: number;
+  end: number;
+  top: number;
+  height: number;
+  color: string;
+  label: string;
+}
+
 export interface TimelineSelection {
   start: number;
   end: number;
