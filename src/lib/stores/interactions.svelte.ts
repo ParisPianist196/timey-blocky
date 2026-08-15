@@ -65,11 +65,11 @@ export class BlockInteraction {
   curPointerInteractionId = $state<number | null>(null);
   timelineInteractions: TimelineInteractions;
   initialBlock: TimeBlock;
-  localBlock: TimeBlock;
+  localBlock = $state<TimeBlock>();
 
   constructor(interactions: TimelineInteractions, block: TimeBlock) {
     this.timelineInteractions = interactions;
-    this.initialBlock = block;
+    this.initialBlock = { ...block };
     this.localBlock = { ...block };
   }
 
@@ -102,7 +102,9 @@ export class BlockInteraction {
   async pointerEndAction(event: PointerEvent) {
     if (
       this.curPointerInteractionId === null ||
-      event.pointerId !== this.curPointerInteractionId
+      event.pointerId !== this.curPointerInteractionId ||
+      !this.localBlock ||
+      !this.initialBlock
     ) {
       return;
     }
@@ -126,7 +128,7 @@ export class BlockInteraction {
       this.localBlock.start !== this.initialBlock.start ||
       this.localBlock.end !== this.initialBlock.end
     ) {
-      this.initialBlock = this.localBlock;
+      this.initialBlock = { ...this.localBlock };
       await updateBlock(this.initialBlock.id, {
         start: this.localBlock.start,
         end: this.localBlock.end,
@@ -144,6 +146,8 @@ export class MoveBlockInteraction extends BlockInteraction {
   }
 
   override pointerStartAction(event: PointerEvent): void {
+    super.pointerStartAction(event);
+
     const currentMinutes = this.timelineInteractions.pointerToMinutes(event);
 
     this.curOffsetMinutes = currentMinutes - this.initialBlock.start;
@@ -152,29 +156,25 @@ export class MoveBlockInteraction extends BlockInteraction {
   override pointerMoveAction(event: PointerEvent): number | undefined {
     const currentMinutes = super.pointerMoveAction(event);
 
-    if (!currentMinutes) return;
+    if (currentMinutes === undefined || !this.localBlock) {
+      return;
+    }
 
     const range = this.timelineInteractions.getMovedBlockRange(
-      {
-        ...this.localBlock,
-        start: this.initialBlock.start,
-        end: this.initialBlock.end,
-      },
+      this.initialBlock,
       currentMinutes,
       this.curOffsetMinutes,
     );
 
-    this.localBlock.start = range.start;
-    this.localBlock.end = range.end;
-
-    return;
+    this.localBlock = {
+      ...this.localBlock,
+      start: range.start,
+      end: range.end,
+    };
   }
 }
 
-export type PointerPosition = {
-  x: number;
-  y: number;
-};
+export class ResizeBlockInteraction extends BlockInteraction {}
 
 export type DragSelection = {
   start: number;
@@ -274,38 +274,6 @@ export function getResizedEnd(
   const snapped = snapMinutes(currentMinutes, snapInterval);
 
   return clampMinutes(snapped, originalStart + minimumDuration, dayEnd);
-}
-
-/**
- * Calculate the distance between two pointers.
- */
-export function pointerDistance(
-  first: PointerPosition,
-  second: PointerPosition,
-): number {
-  const dx = first.x - second.x;
-  const dy = first.y - second.y;
-
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
-/**
- * Calculate a new zoom level from a pinch gesture.
- */
-export function getPinchZoom(
-  startDistance: number,
-  currentDistance: number,
-  startPixelsPerHour: number,
-  minPixelsPerHour: number,
-  maxPixelsPerHour: number,
-): number {
-  if (startDistance === 0) {
-    return startPixelsPerHour;
-  }
-
-  const scale = currentDistance / startDistance;
-
-  return clamp(startPixelsPerHour * scale, minPixelsPerHour, maxPixelsPerHour);
 }
 
 /**

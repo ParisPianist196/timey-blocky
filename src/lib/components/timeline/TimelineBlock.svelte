@@ -26,15 +26,21 @@
   let movingInteraction = $derived(
     new MoveBlockInteraction(block, interactions),
   );
-
   const visualTop = $derived(
-    ((movingInteraction.localBlock.start - interactions.config.dayStart) / 60) *
-      interactions.config.pixelsPerHour,
+    movingInteraction.localBlock
+      ? ((movingInteraction.localBlock.start - interactions.config.dayStart) /
+          60) *
+          interactions.config.pixelsPerHour
+      : 0,
   );
+
   const visualHeight = $derived(
-    ((movingInteraction.localBlock.end - movingInteraction.localBlock.start) /
-      60) *
-      interactions.config.pixelsPerHour,
+    movingInteraction.localBlock
+      ? ((movingInteraction.localBlock.end -
+          movingInteraction.localBlock.start) /
+          60) *
+          interactions.config.pixelsPerHour
+      : 0,
   );
 
   /**
