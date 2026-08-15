@@ -22,7 +22,8 @@
       "@lib/*": ["./src/lib/*"],
       "@components/*": ["./src/lib/components/*"],
       "@timeline/*": ["./src/lib/timeline/*"],
-      "@db/*": ["./src/lib/db/*"]
+      "@db/*": ["./src/lib/db/*"],
+      "@stores/*": ["./src/lib/stores/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]

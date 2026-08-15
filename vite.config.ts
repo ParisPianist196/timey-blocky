@@ -15,6 +15,7 @@ export default defineConfig({
         new URL("./src/lib/timeline", import.meta.url),
       ),
       "@db": fileURLToPath(new URL("./src/lib/db", import.meta.url)),
+      "@stores": fileURLToPath(new URL("./src/lib/stores", import.meta.url)),
     },
   },
 });

@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { getCreationRange, pixelsToMinutes } from "@timeline/interactions";
+  import {
+    getCreationRange,
+    TimelineInteractions,
+  } from "@stores/interactions.svelte";
 
   import type {
     CreatingBlock,
@@ -10,6 +13,8 @@
   import { addBlock, timelineState } from "@lib/stores/timelineBlocks.svelte";
 
   import TimelineBlock from "./TimelineBlock.svelte";
+  import { onMount } from "svelte";
+  import { randomColor } from "@lib/colors";
 
   interface Props {
     config: TimelineConfig;
@@ -17,37 +22,21 @@
 
   let { config }: Props = $props();
 
-  let gridElement = $state<HTMLElement | null>(null);
-
+  let gridElement = $state<HTMLElement | null>();
   let creationBlock = $state<CreatingBlock | null>(null);
-
   let creationPointerId = $state<number | null>(null);
+  let interactions = $state<TimelineInteractions>();
 
   const totalMinutes = $derived(config.dayEnd - config.dayStart);
-
   const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
 
-  /**
-   * Convert a pointer's client Y coordinate
-   * into timeline minutes.
-   */
-  function pointerToMinutes(event: PointerEvent): number {
-    if (!gridElement) {
-      return config.dayStart;
-    }
-
-    const rect = gridElement.getBoundingClientRect();
-
-    const pixels = event.clientY - rect.top;
-
-    const minutes = pixelsToMinutes(
-      pixels,
-      config.dayStart,
-      config.pixelsPerHour,
+  $effect(() => {
+    if (!gridElement) return;
+    interactions = new TimelineInteractions(
+      config,
+      gridElement.getBoundingClientRect(),
     );
-
-    return Math.max(config.dayStart, Math.min(minutes, config.dayEnd));
-  }
+  });
 
   /**
    * Start creating a new block.
@@ -56,10 +45,11 @@
     if (event.button !== 0) {
       return;
     }
+    if (!interactions) return;
 
     event.preventDefault();
 
-    const minutes = pointerToMinutes(event);
+    const minutes = interactions.pointerToMinutes(event);
 
     creationPointerId = event.pointerId;
 
@@ -68,6 +58,8 @@
       end: minutes,
       top: 0,
       height: 0,
+      color: "",
+      label: "",
     };
 
     const target = event.currentTarget as HTMLElement;
@@ -81,6 +73,7 @@
    * Nothing is persisted here.
    */
   function handleCreationPointerMove(event: PointerEvent) {
+    if (!interactions) return;
     if (creationPointerId !== event.pointerId) {
       return;
     }
@@ -89,7 +82,7 @@
       return;
     }
 
-    const currentMinutes = pointerToMinutes(event);
+    const currentMinutes = interactions.pointerToMinutes(event);
 
     const range = getCreationRange(
       creationBlock.start,
@@ -98,7 +91,7 @@
     );
 
     creationBlock = {
-      start: creationBlock.start,
+      ...creationBlock,
       end: currentMinutes,
       top: ((range.start - config.dayStart) / 60) * config.pixelsPerHour,
       height: ((range.end - range.start) / 60) * config.pixelsPerHour,
@@ -140,7 +133,7 @@
       id: crypto.randomUUID(),
       start: range.start,
       end: range.end,
-      color: "#3B82F6",
+      color: randomColor(),
       label: "",
     };
 
@@ -171,64 +164,66 @@
 </script>
 
 <div bind:this={gridElement} class="grid" style:height={`${totalHeight}px`}>
-  <!-- Creation surface -->
-  <button
-    class="creation-surface"
-    type="button"
-    aria-label="Create a time block"
-    onpointerdown={handleCreationPointerDown}
-    onpointermove={handleCreationPointerMove}
-    onpointerup={handleCreationPointerUp}
-    onpointercancel={handleCreationPointerCancel}
-  ></button>
+  {#if interactions}
+    <!-- Creation surface -->
+    <button
+      class="creation-surface"
+      type="button"
+      aria-label="Create a time block"
+      onpointerdown={handleCreationPointerDown}
+      onpointermove={handleCreationPointerMove}
+      onpointerup={handleCreationPointerUp}
+      onpointercancel={handleCreationPointerCancel}
+    ></button>
 
-  {#if creationBlock && creationBlock.height > 0}
-    <div
-      class="creation-preview"
-      style:top={`${creationBlock.top}px`}
-      style:height={`${creationBlock.height}px`}
-    >
-      <span>
-        {Math.floor(
-          getCreationRange(
-            creationBlock.start,
-            creationBlock.end,
-            config.snapMinutes,
-          ).start / 60,
-        )}
-        :
-        {String(
-          getCreationRange(
-            creationBlock.start,
-            creationBlock.end,
-            config.snapMinutes,
-          ).start % 60,
-        ).padStart(2, "0")}
-        –
-        {Math.floor(
-          getCreationRange(
-            creationBlock.start,
-            creationBlock.end,
-            config.snapMinutes,
-          ).end / 60,
-        )}
-        :
-        {String(
-          getCreationRange(
-            creationBlock.start,
-            creationBlock.end,
-            config.snapMinutes,
-          ).end % 60,
-        ).padStart(2, "0")}
-      </span>
+    {#if creationBlock && creationBlock.height > 0}
+      <div
+        class="creation-preview"
+        style:top={`${creationBlock.top}px`}
+        style:height={`${creationBlock.height}px`}
+      >
+        <span>
+          {Math.floor(
+            getCreationRange(
+              creationBlock.start,
+              creationBlock.end,
+              config.snapMinutes,
+            ).start / 60,
+          )}
+          :
+          {String(
+            getCreationRange(
+              creationBlock.start,
+              creationBlock.end,
+              config.snapMinutes,
+            ).start % 60,
+          ).padStart(2, "0")}
+          –
+          {Math.floor(
+            getCreationRange(
+              creationBlock.start,
+              creationBlock.end,
+              config.snapMinutes,
+            ).end / 60,
+          )}
+          :
+          {String(
+            getCreationRange(
+              creationBlock.start,
+              creationBlock.end,
+              config.snapMinutes,
+            ).end % 60,
+          ).padStart(2, "0")}
+        </span>
+      </div>
+    {/if}
+
+    <div class="blocks">
+      {#each timelineState.blocks as block (block.id)}
+        <TimelineBlock {block} {interactions} />
+      {/each}
     </div>
   {/if}
-
-  <div class="blocks">
-    {#each timelineState.blocks as block (block.id)}
-      <TimelineBlock {block} {config} {pointerToMinutes} />
-    {/each}
-  </div>
 </div>
 
 <style>

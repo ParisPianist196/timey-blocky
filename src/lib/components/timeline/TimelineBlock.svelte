@@ -6,237 +6,83 @@
   } from "@lib/stores/timelineBlocks.svelte";
 
   import {
-    getMovedBlockRange,
-    getResizedEnd,
-    getResizedStart,
-  } from "@timeline/interactions";
+    MoveBlockInteraction,
+    TimelineInteractions,
+  } from "@lib/stores/interactions.svelte";
 
-  import type { TimeBlock, TimelineConfig } from "@timeline/types";
+  import type { TimeBlock } from "@timeline/types";
 
   interface Props {
     block: TimeBlock;
-    config: TimelineConfig;
-
-    pointerToMinutes: (event: PointerEvent) => number;
-
-    onrangechange?: (blockId: string, start: number, end: number) => void;
+    interactions: TimelineInteractions;
   }
 
-  let {
-    block,
-    config,
-
-    pointerToMinutes,
-
-    onrangechange,
-  }: Props = $props();
-
-  /**
-   * The block's temporary visual state.
-   *
-   * This is intentionally separate from `block`.
-   *
-   * `block` is the committed state from the store.
-   * `localStart` / `localEnd` are only used while
-   * the user is interacting with the block.
-   */
-  let localStart = $state<number | null>(null);
-  let localEnd = $state<number | null>(null);
-
-  /**
-   * Which part of the block is currently being
-   * manipulated.
-   */
-  let interaction = $state<
-    "idle" | "moving" | "resizing-start" | "resizing-end"
-  >("idle");
-
-  /**
-   * Data captured when the interaction begins.
-   *
-   * These values never change during the drag.
-   */
-  let originalStart = $state(0);
-  let originalEnd = $state(0);
-  let offsetMinutes = $state(0);
-
-  /**
-   * The pointer that started the interaction.
-   */
-  let pointerId = $state<number | null>(null);
-
-  /**
-   * The button that currently owns pointer capture.
-   */
-  let capturedElement = $state<HTMLButtonElement | null>(null);
-
-  /**
-   * Resize handle currently being hovered.
-   */
-  let hoveredResizeHandle = $state<"start" | "end" | null>(null);
-
-  /**
-   * Whether the block is currently being edited.
-   *
-   * Kept local for now; we can move this into a
-   * dedicated editing state later.
-   */
-  let editing = $state(false);
-
-  let titleInput = $state<HTMLInputElement | null>(null);
+  let { block, interactions }: Props = $props();
 
   let title = $derived(block.label);
-
-  let finished = $state(false);
-
+  let editingTitle = $state(false);
   const textColor = $derived(contrastText(block.color));
 
-  /**
-   * The visual start of the block.
-   *
-   * During an interaction we use the local value.
-   * Otherwise we use the committed block value.
-   */
-  const visualStart = $derived(localStart ?? block.start);
+  let movingInteraction = $derived(
+    new MoveBlockInteraction(block, interactions),
+  );
 
-  /**
-   * The visual end of the block.
-   */
-  const visualEnd = $derived(localEnd ?? block.end);
-
-  /**
-   * Visual position of the block.
-   */
   const visualTop = $derived(
-    ((visualStart - config.dayStart) / 60) * config.pixelsPerHour,
+    ((movingInteraction.localBlock.start - interactions.config.dayStart) / 60) *
+      interactions.config.pixelsPerHour,
   );
-
-  /**
-   * Visual height of the block.
-   */
   const visualHeight = $derived(
-    ((visualEnd - visualStart) / 60) * config.pixelsPerHour,
+    ((movingInteraction.localBlock.end - movingInteraction.localBlock.start) /
+      60) *
+      interactions.config.pixelsPerHour,
   );
-
-  /**
-   * Reset temporary interaction state.
-   */
-  function resetInteraction() {
-    interaction = "idle";
-
-    localStart = null;
-    localEnd = null;
-
-    originalStart = 0;
-    originalEnd = 0;
-    offsetMinutes = 0;
-
-    pointerId = null;
-    capturedElement = null;
-  }
-
-  /**
-   * Capture the pointer on the native button that
-   * actually started the interaction.
-   */
-  function capturePointer(event: PointerEvent) {
-    const element = event.currentTarget as HTMLButtonElement;
-
-    capturedElement = element;
-
-    pointerId = event.pointerId;
-
-    element.setPointerCapture(event.pointerId);
-  }
-
-  /**
-   * Release pointer capture.
-   */
-  function releasePointer() {
-    if (
-      capturedElement &&
-      pointerId !== null &&
-      capturedElement.hasPointerCapture(pointerId)
-    ) {
-      capturedElement.releasePointerCapture(pointerId);
-    }
-
-    capturedElement = null;
-    pointerId = null;
-  }
-
-  /**
-   * Begin moving the block.
-   */
-  function handleMovePointerDown(event: PointerEvent) {
-    if (event.button !== 0 || editing) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const currentMinutes = pointerToMinutes(event);
-
-    originalStart = block.start;
-    originalEnd = block.end;
-
-    offsetMinutes = currentMinutes - block.start;
-
-    localStart = block.start;
-    localEnd = block.end;
-
-    interaction = "moving";
-
-    capturePointer(event);
-  }
 
   /**
    * Begin resizing the start of the block.
    */
   function handleResizeStartPointerDown(event: PointerEvent) {
-    if (event.button !== 0 || editing) {
+    if (event.button !== 0 || editingTitle) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
 
-    originalStart = block.start;
-    originalEnd = block.end;
+    // originalStart = block.start;
+    // originalEnd = block.end;
 
-    localStart = block.start;
-    localEnd = block.end;
+    // localStart = block.start;
+    // localEnd = block.end;
 
-    interaction = "resizing-start";
+    // interaction = "resizing-start";
 
-    hoveredResizeHandle = "start";
+    // hoveredResizeHandle = "start";
 
-    capturePointer(event);
+    // capturePointer(event);
   }
 
   /**
    * Begin resizing the end of the block.
    */
   function handleResizeEndPointerDown(event: PointerEvent) {
-    if (event.button !== 0 || editing) {
+    if (event.button !== 0 || editingTitle) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
 
-    originalStart = block.start;
-    originalEnd = block.end;
+    // originalStart = block.start;
+    // originalEnd = block.end;
 
-    localStart = block.start;
-    localEnd = block.end;
+    // localStart = block.start;
+    // localEnd = block.end;
 
-    interaction = "resizing-end";
+    // interaction = "resizing-end";
 
-    hoveredResizeHandle = "end";
+    // hoveredResizeHandle = "end";
 
-    capturePointer(event);
+    // capturePointer(event);
   }
 
   /**
@@ -250,126 +96,42 @@
    * which makes dragging visually immediate.
    */
   function handlePointerMove(event: PointerEvent) {
-    if (pointerId === null || event.pointerId !== pointerId) {
-      return;
-    }
-
-    if (interaction === "idle") {
-      return;
-    }
-
-    const currentMinutes = pointerToMinutes(event);
-
-    if (interaction === "moving") {
-      const range = getMovedBlockRange(
-        {
-          ...block,
-          start: originalStart,
-          end: originalEnd,
-        },
-        currentMinutes,
-        offsetMinutes,
-        config.dayStart,
-        config.dayEnd,
-        config.snapMinutes,
-      );
-
-      localStart = range.start;
-      localEnd = range.end;
-
-      return;
-    }
-
-    if (interaction === "resizing-start") {
-      localStart = getResizedStart(
-        originalEnd,
-        currentMinutes,
-        config.dayStart,
-        config.snapMinutes,
-      );
-
-      localEnd = originalEnd;
-
-      return;
-    }
-
-    if (interaction === "resizing-end") {
-      localStart = originalStart;
-
-      localEnd = getResizedEnd(
-        originalStart,
-        currentMinutes,
-        config.dayEnd,
-        config.snapMinutes,
-      );
-    }
-  }
-
-  /**
-   * Persist the final range.
-   *
-   * This is the ONLY place where the interaction
-   * talks to the store.
-   */
-  async function handlePointerUp(event: PointerEvent) {
-    if (pointerId === null || event.pointerId !== pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const finalStart = localStart ?? block.start;
-
-    const finalEnd = localEnd ?? block.end;
-
-    const didChange = finalStart !== block.start || finalEnd !== block.end;
-
-    const blockId = block.id;
-
-    releasePointer();
-
-    const wasInteracting = interaction !== "idle";
-
-    resetInteraction();
-
-    if (wasInteracting && didChange) {
-      await onrangechange?.(blockId, finalStart, finalEnd);
-    }
+    // if (interaction === "resizing-start") {
+    //   localStart = getResizedStart(
+    //     originalEnd,
+    //     currentMinutes,
+    //     interactions.config.dayStart,
+    //     interactions.config.snapMinutes,
+    //   );
+    //   localEnd = originalEnd;
+    //   return;
+    // }
+    // if (interaction === "resizing-end") {
+    //   localStart = originalStart;
+    //   localEnd = getResizedEnd(
+    //     originalStart,
+    //     currentMinutes,
+    //     interactions.config.dayEnd,
+    //     interactions.config.snapMinutes,
+    //   );
+    // }
   }
 
   /**
    * Cancel the interaction without persisting.
    */
-  function handlePointerCancel(event: PointerEvent) {
-    if (pointerId === null || event.pointerId !== pointerId) {
-      return;
-    }
+  // function handlePointerCancel(event: PointerEvent) {
+  //   if (pointerId === null || event.pointerId !== pointerId) {
+  //     return;
+  //   }
 
-    event.preventDefault();
-    event.stopPropagation();
+  //   event.preventDefault();
+  //   event.stopPropagation();
 
-    releasePointer();
+  //   releasePointer();
 
-    resetInteraction();
-  }
-
-  /**
-   * Begin editing the title.
-   */
-  function handleEdit(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    editing = true;
-    title = block.label;
-    finished = false;
-
-    requestAnimationFrame(() => {
-      titleInput?.focus();
-      titleInput?.select();
-    });
-  }
+  //   resetInteraction();
+  // }
 
   /**
    * Delete the block.
@@ -389,12 +151,7 @@
    * Save the title.
    */
   function commitTitle() {
-    if (finished) {
-      return;
-    }
-
-    finished = true;
-    editing = false;
+    editingTitle = false;
     updateBlockTitle(block.id, title);
   }
 
@@ -412,8 +169,7 @@
     if (event.key === "Escape") {
       event.preventDefault();
 
-      finished = true;
-      editing = false;
+      editingTitle = false;
       title = block.label;
     }
   }
@@ -425,14 +181,13 @@
   style:top={`${visualTop}px`}
   style:height={`${visualHeight}px`}
 >
-  {#if editing}
+  {#if editingTitle}
     <div
       class="block editing"
       style:background-color={block.color}
       style:color={textColor}
     >
       <input
-        bind:this={titleInput}
         class="title-input"
         type="text"
         bind:value={title}
@@ -448,7 +203,7 @@
         class="action-button edit-button"
         type="button"
         aria-label={`Edit ${block.label || "time block"}`}
-        onclick={handleEdit}
+        onclick={() => (editingTitle = true)}
       >
         ✎
       </button>
@@ -475,10 +230,10 @@
       style:background-color={block.color}
       style:color={textColor}
       aria-label={`Move ${block.label || "time block"}`}
-      onpointerdown={handleMovePointerDown}
-      onpointermove={handlePointerMove}
-      onpointerup={handlePointerUp}
-      onpointercancel={handlePointerCancel}
+      onpointerdown={(e) => movingInteraction.pointerStartAction(e)}
+      onpointermove={(e) => movingInteraction.pointerMoveAction(e)}
+      onpointerup={(e) => movingInteraction.pointerEndAction(e)}
+      // onpointercancel={handlePointerCancel}
     >
       <span class="label">
         {block.label}
@@ -487,32 +242,26 @@
 
     <!-- Top resize handle -->
     <button
-      class:visible={hoveredResizeHandle === "start"}
       class="resize-handle resize-handle-start"
       type="button"
       aria-label={`Resize start of ${block.label || "time block"}`}
       onpointerdown={handleResizeStartPointerDown}
       onpointermove={handlePointerMove}
-      onpointerup={handlePointerUp}
-      onpointercancel={handlePointerCancel}
-      onpointerenter={() => (hoveredResizeHandle = "start")}
-      onpointerleave={() => (hoveredResizeHandle = null)}
+      // onpointerup={handlePointerUp}
+      // onpointercancel={handlePointerCancel}
     >
       <span class="handle-grip"></span>
     </button>
 
     <!-- Bottom resize handle -->
     <button
-      class:visible={hoveredResizeHandle === "end"}
       class="resize-handle resize-handle-end"
       type="button"
       aria-label={`Resize end of ${block.label || "time block"}`}
       onpointerdown={handleResizeEndPointerDown}
       onpointermove={handlePointerMove}
-      onpointerup={handlePointerUp}
-      onpointercancel={handlePointerCancel}
-      onpointerenter={() => (hoveredResizeHandle = "end")}
-      onpointerleave={() => (hoveredResizeHandle = null)}
+      // onpointerup={handlePointerUp}
+      // onpointercancel={handlePointerCancel}
     >
       <span class="handle-grip"></span>
     </button>

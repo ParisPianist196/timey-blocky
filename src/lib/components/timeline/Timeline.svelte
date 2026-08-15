@@ -1,17 +1,12 @@
 <script lang="ts">
   import TimelineGrid from "@components/timeline/TimelineGrid.svelte";
-  import type { TimelineConfig } from "@timeline/types";
   import TimelineRuler from "./TimelineRuler.svelte";
   import { loadBlocks, timelineState } from "@lib/stores/timelineBlocks.svelte";
   import { onMount } from "svelte";
   import { getCurrentUser } from "@lib/db/auth";
+  import { defaultConfig } from "@lib/stores/interactions.svelte";
 
-  const config: TimelineConfig = {
-    dayStart: 600,
-    dayEnd: 1440,
-    snapMinutes: 15,
-    pixelsPerHour: 80,
-  };
+  const config = defaultConfig;
 
   async function load() {
     const user = getCurrentUser();
