@@ -5,12 +5,11 @@
     updateBlockTitle,
   } from "@lib/stores/timelineBlocks.svelte";
 
-  import {
-    MoveBlockInteraction,
-    TimelineInteractions,
-  } from "@lib/stores/interactions.svelte";
+  import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
+  import { MoveBlockInteraction } from "@lib/interactions/MoveBlockInteraction";
 
   import type { TimeBlock } from "@timeline/types";
+  import { tick } from "svelte";
 
   interface Props {
     block: TimeBlock;
@@ -19,6 +18,7 @@
 
   let { block, interactions }: Props = $props();
 
+  let titleElement = $state<HTMLElement | null>(null);
   let title = $derived(block.label);
   let editingTitle = $state(false);
   const textColor = $derived(contrastText(block.color));
@@ -139,13 +139,6 @@
   //   resetInteraction();
   // }
 
-  /**
-   * Delete the block.
-   *
-   * We can wire this directly into the store once
-   * we finish moving all block actions into this
-   * component.
-   */
   function handleDelete(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
@@ -153,17 +146,16 @@
     removeBlock(block.id);
   }
 
-  /**
-   * Save the title.
-   */
+  async function handleEditTitle() {
+    editingTitle = true;
+    await tick();
+    titleElement?.focus();
+  }
+
   function commitTitle() {
     editingTitle = false;
     updateBlockTitle(block.id, title);
   }
-
-  /**
-   * Handle title editing keyboard shortcuts.
-   */
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -194,6 +186,7 @@
       style:color={textColor}
     >
       <input
+        bind:this={titleElement}
         class="title-input"
         type="text"
         bind:value={title}
@@ -209,7 +202,7 @@
         class="action-button edit-button"
         type="button"
         aria-label={`Edit ${block.label || "time block"}`}
-        onclick={() => (editingTitle = true)}
+        onclick={handleEditTitle}
       >
         ✎
       </button>
@@ -410,8 +403,7 @@
     z-index: 10;
   }
 
-  .block-wrapper:hover .resize-handle,
-  .resize-handle.visible {
+  .block-wrapper:hover .resize-handle {
     opacity: 1;
   }
 

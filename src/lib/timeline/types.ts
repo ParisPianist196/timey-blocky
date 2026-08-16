@@ -4,20 +4,8 @@ export interface TimeBlock {
   end: number;
   color: string;
   label: string;
-}
-
-export interface CreatingBlock {
-  start: number;
-  end: number;
-  top: number;
-  height: number;
-  color: string;
-  label: string;
-}
-
-export interface TimelineSelection {
-  start: number;
-  end: number;
+  top?: number;
+  height?: number;
 }
 
 export interface TimelineConfig {
@@ -26,3 +14,20 @@ export interface TimelineConfig {
   snapMinutes: number;
   pixelsPerHour: number;
 }
+
+export type TimelineViewport = {
+  top: number;
+  scrollTop: number;
+};
+
+export const defaultConfig: TimelineConfig = {
+  dayStart: 600,
+  dayEnd: 1440,
+  snapMinutes: 15,
+  pixelsPerHour: 80,
+};
+
+export type DragSelection = {
+  start: number;
+  end: number;
+};

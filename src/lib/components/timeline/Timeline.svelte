@@ -4,7 +4,7 @@
   import { loadBlocks, timelineState } from "@lib/stores/timelineBlocks.svelte";
   import { onMount } from "svelte";
   import { getCurrentUser } from "@lib/db/auth";
-  import { defaultConfig } from "@lib/stores/interactions.svelte";
+  import { defaultConfig } from "@lib/interactions/utilss
 
   const config = defaultConfig;
 

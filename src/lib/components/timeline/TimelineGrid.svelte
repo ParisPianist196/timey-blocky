@@ -1,20 +1,16 @@
 <script lang="ts">
-  import {
-    getCreationRange,
-    TimelineInteractions,
-  } from "@stores/interactions.svelte";
-
-  import type {
-    CreatingBlock,
-    TimeBlock,
-    TimelineConfig,
-  } from "@timeline/types";
-
-  import { addBlock, timelineState } from "@lib/stores/timelineBlocks.svelte";
-
+  import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
+  import { CreateBlockInteraction } from "@lib/interactions/CreateBlockInteraction";
+  import type { TimelineConfig, TimelineViewport } from "@timeline/types";
+  import { timelineState } from "@lib/stores/timelineBlocks.svelte";
   import TimelineBlock from "./TimelineBlock.svelte";
-  import { onMount } from "svelte";
-  import { randomColor } from "@lib/colors";
+
+  function formatMinutes(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+
+    return `${hours}:${String(mins).padStart(2, "0")}`;
+  }
 
   interface Props {
     config: TimelineConfig;
@@ -22,200 +18,107 @@
 
   let { config }: Props = $props();
 
-  let gridElement = $state<HTMLElement | null>();
-  let creationBlock = $state<CreatingBlock | null>(null);
-  let creationPointerId = $state<number | null>(null);
+  let gridElement = $state<HTMLElement | null>(null);
   let interactions = $state<TimelineInteractions>();
+  let creationInteraction = $state<CreateBlockInteraction | null>(null);
 
   const totalMinutes = $derived(config.dayEnd - config.dayStart);
+
   const totalHeight = $derived((totalMinutes / 60) * config.pixelsPerHour);
+
+  function getViewport(): TimelineViewport {
+    if (!gridElement) {
+      throw new Error("Grid element is not initialized");
+    }
+
+    const rect = gridElement.getBoundingClientRect();
+
+    return {
+      top: rect.top,
+      scrollTop: gridElement.scrollTop,
+    };
+  }
 
   $effect(() => {
     if (!gridElement) return;
-    interactions = new TimelineInteractions(
-      config,
-      gridElement.getBoundingClientRect(),
-    );
+
+    interactions = new TimelineInteractions(config, getViewport());
   });
 
-  /**
-   * Start creating a new block.
-   */
-  function handleCreationPointerDown(event: PointerEvent) {
-    if (event.button !== 0) {
-      return;
-    }
+  function updateViewport() {
     if (!interactions) return;
 
-    event.preventDefault();
-
-    const minutes = interactions.pointerToMinutes(event);
-
-    creationPointerId = event.pointerId;
-
-    creationBlock = {
-      start: minutes,
-      end: minutes,
-      top: 0,
-      height: 0,
-      color: "",
-      label: "",
-    };
-
-    const target = event.currentTarget as HTMLElement;
-
-    target.setPointerCapture(event.pointerId);
+    interactions.viewport = getViewport();
   }
 
-  /**
-   * Update the local creation preview.
-   *
-   * Nothing is persisted here.
-   */
-  function handleCreationPointerMove(event: PointerEvent) {
-    if (!interactions) return;
-    if (creationPointerId !== event.pointerId) {
-      return;
+  function handleCreateBlock(event: PointerEvent) {
+    if (!interactions) {
+      throw new Error("Can't create block before interactions are initialized");
     }
 
-    if (!creationBlock) {
-      return;
-    }
+    updateViewport();
 
-    const currentMinutes = interactions.pointerToMinutes(event);
-
-    const range = getCreationRange(
-      creationBlock.start,
-      currentMinutes,
-      config.snapMinutes,
-    );
-
-    creationBlock = {
-      ...creationBlock,
-      end: currentMinutes,
-      top: ((range.start - config.dayStart) / 60) * config.pixelsPerHour,
-      height: ((range.end - range.start) / 60) * config.pixelsPerHour,
-    };
+    creationInteraction = new CreateBlockInteraction(interactions, event);
   }
 
-  /**
-   * Finish creating the block and persist it.
-   */
-  async function handleCreationPointerUp(event: PointerEvent) {
-    if (creationPointerId !== event.pointerId) {
-      return;
-    }
+  function handleCreateMove(event: PointerEvent) {
+    if (!creationInteraction) return;
 
-    if (!creationBlock) {
-      return;
-    }
-
-    const range = getCreationRange(
-      creationBlock.start,
-      creationBlock.end,
-      config.snapMinutes,
-    );
-
-    const target = event.currentTarget as HTMLElement;
-
-    if (target.hasPointerCapture(event.pointerId)) {
-      target.releasePointerCapture(event.pointerId);
-    }
-
-    creationBlock = null;
-    creationPointerId = null;
-
-    if (range.start === range.end) {
-      return;
-    }
-
-    const block: TimeBlock = {
-      id: crypto.randomUUID(),
-      start: range.start,
-      end: range.end,
-      color: randomColor(),
-      label: "",
-    };
-
-    try {
-      await addBlock(block);
-    } catch (error) {
-      console.error("Failed to create block:", error);
-    }
+    updateViewport();
+    creationInteraction.pointerMoveAction(event);
   }
 
-  /**
-   * Cancel creation.
-   */
+  async function handleCreateEnd(event: PointerEvent) {
+    if (!creationInteraction) return;
+
+    updateViewport();
+
+    await creationInteraction.pointerEndAction(event);
+    creationInteraction = null;
+  }
+
   function handleCreationPointerCancel(event: PointerEvent) {
-    if (creationPointerId !== event.pointerId) {
-      return;
-    }
+    if (!creationInteraction) return;
 
-    const target = event.currentTarget as HTMLElement;
-
-    if (target.hasPointerCapture(event.pointerId)) {
-      target.releasePointerCapture(event.pointerId);
-    }
-
-    creationBlock = null;
-    creationPointerId = null;
+    creationInteraction.pointerEndAction(event);
+    creationInteraction = null;
   }
 </script>
 
-<div bind:this={gridElement} class="grid" style:height={`${totalHeight}px`}>
+<div
+  bind:this={gridElement}
+  class="grid"
+  style:height={`${totalHeight}px`}
+  onscroll={updateViewport}
+>
   {#if interactions}
     <!-- Creation surface -->
     <button
       class="creation-surface"
       type="button"
       aria-label="Create a time block"
-      onpointerdown={handleCreationPointerDown}
-      onpointermove={handleCreationPointerMove}
-      onpointerup={handleCreationPointerUp}
+      onpointerdown={handleCreateBlock}
+      onpointermove={handleCreateMove}
+      onpointerup={handleCreateEnd}
       onpointercancel={handleCreationPointerCancel}
     ></button>
 
-    {#if creationBlock && creationBlock.height > 0}
-      <div
-        class="creation-preview"
-        style:top={`${creationBlock.top}px`}
-        style:height={`${creationBlock.height}px`}
-      >
-        <span>
-          {Math.floor(
-            getCreationRange(
-              creationBlock.start,
-              creationBlock.end,
-              config.snapMinutes,
-            ).start / 60,
-          )}
-          :
-          {String(
-            getCreationRange(
-              creationBlock.start,
-              creationBlock.end,
-              config.snapMinutes,
-            ).start % 60,
-          ).padStart(2, "0")}
-          –
-          {Math.floor(
-            getCreationRange(
-              creationBlock.start,
-              creationBlock.end,
-              config.snapMinutes,
-            ).end / 60,
-          )}
-          :
-          {String(
-            getCreationRange(
-              creationBlock.start,
-              creationBlock.end,
-              config.snapMinutes,
-            ).end % 60,
-          ).padStart(2, "0")}
-        </span>
-      </div>
+    {#if creationInteraction?.localBlock}
+      {@const block = creationInteraction.localBlock}
+
+      {#if block.height && block.height > 0}
+        <div
+          class="creation-preview"
+          style:top={`${block.top}px`}
+          style:height={`${block.height}px`}
+        >
+          <span>
+            {formatMinutes(block.start)}
+            –
+            {formatMinutes(block.end)}
+          </span>
+        </div>
+      {/if}
     {/if}
 
     <div class="blocks">
@@ -229,7 +132,9 @@
 <style>
   .grid {
     position: relative;
+
     height: 100%;
+
     user-select: none;
     touch-action: none;
   }
