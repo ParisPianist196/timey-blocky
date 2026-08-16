@@ -144,9 +144,8 @@
 
   .creation-surface {
     position: absolute;
-    inset: 0;
-
-    width: 100%;
+    right: 0;
+    width: 80%;
     height: 100%;
 
     margin: 0;
