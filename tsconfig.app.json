@@ -6,7 +6,9 @@
     "useDefineForClassFields": true,
     "module": "ESNext",
     "types": ["svelte", "vite/client"],
-    "noEmit": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "composite": true,
     /**
      * Typecheck JS in `.svelte` and `.js` files by default.
      * Disable checkJs if you'd like to use dynamic types in JS.
@@ -15,7 +17,14 @@
      */
     "allowJs": true,
     "checkJs": true,
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "paths": {
+      "@lib/*": ["./src/lib/*"],
+      "@components/*": ["./src/lib/components/*"],
+      "@timeline/*": ["./src/lib/timeline/*"],
+      "@db/*": ["./src/lib/db/*"],
+      "@stores/*": ["./src/lib/stores/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]
 }
