@@ -4,7 +4,7 @@ import {
   type TimeBlock,
   defaultConfig,
   type DragSelection,
-} from "@lib/timeline/types";
+} from "@lib/interactions/types";
 import { clampMinutes, snapMinutes, normalizeRange } from "./utils";
 
 export class TimelineInteractions {

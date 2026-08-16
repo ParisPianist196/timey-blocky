@@ -1,5 +1,5 @@
 import { randomColor } from "@lib/colors";
-import type { TimeBlock } from "@lib/timeline/types";
+import type { TimeBlock } from "@lib/interactions/types";
 import { BlockInteraction } from "./BlockInteraction.svelte";
 import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
 

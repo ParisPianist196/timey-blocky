@@ -6,7 +6,7 @@
   } from "@lib/stores/timelineBlocks.svelte";
 
   import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
-  import type { TimeBlock } from "@timeline/types";
+  import type { TimeBlock } from "@lib/interactions/types";
   import { tick } from "svelte";
   import { UpdateBlockInteraction } from "@lib/interactions/UpdateBlockInteractions";
 
@@ -151,7 +151,6 @@
       onpointerdown={(e) => updateInteractions.pointerStartAction(e)}
       onpointermove={(e) => updateInteractions.resizeAction(e, "start")}
       onpointerup={(e) => updateInteractions.pointerEndAction(e)}
-      // onpointercancel={handlePointerCancel}
     >
       <span class="handle-grip"></span>
     </button>
@@ -164,7 +163,6 @@
       onpointerdown={(e) => updateInteractions.pointerStartAction(e)}
       onpointermove={(e) => updateInteractions.resizeAction(e, "end")}
       onpointerup={(e) => updateInteractions.pointerEndAction(e)}
-      // onpointercancel={handlePointerCancel}
     >
       <span class="handle-grip"></span>
     </button>

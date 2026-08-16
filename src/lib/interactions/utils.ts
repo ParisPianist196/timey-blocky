@@ -1,4 +1,4 @@
-import type { DragSelection } from "@lib/timeline/types";
+import type { DragSelection } from "@lib/interactions/types";
 
 /**
  * Snap a time to the nearest interval.
