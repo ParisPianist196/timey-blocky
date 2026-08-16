@@ -8,7 +8,7 @@ import {
 import { clampMinutes, snapMinutes, normalizeRange } from "./utils";
 
 export class TimelineInteractions {
-  config = $state<TimelineConfig>(defaultConfig);
+  config = defaultConfig;
   viewport: TimelineViewport;
 
   constructor(config: TimelineConfig, viewport: TimelineViewport) {

@@ -1,7 +1,7 @@
 import { randomColor } from "@lib/colors";
 import type { TimeBlock } from "@lib/timeline/types";
-import { BlockInteraction } from "./BlockInteraction";
-import { TimelineInteractions } from "../stores/TimelineInteractions";
+import { BlockInteraction } from "./BlockInteraction.svelte";
+import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
 
 export class CreateBlockInteraction extends BlockInteraction {
   constructor(interactions: TimelineInteractions, event: PointerEvent) {
