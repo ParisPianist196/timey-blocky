@@ -1,7 +1,10 @@
 <script lang="ts">
   import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
   import { CreateBlockInteraction } from "@lib/interactions/CreateBlockInteraction";
-  import type { TimelineConfig, TimelineViewport } from "@timeline/types";
+  import type {
+    TimelineConfig,
+    TimelineViewport,
+  } from "@lib/interactions/types";
   import { timelineState } from "@lib/stores/timelineBlocks.svelte";
   import TimelineBlock from "./TimelineBlock.svelte";
 

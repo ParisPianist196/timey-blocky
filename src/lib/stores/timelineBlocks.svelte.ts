@@ -6,7 +6,7 @@ import {
   type NewRange,
 } from "@db/ranges";
 
-import type { TimeBlock } from "@timeline/types";
+import type { TimeBlock } from "@lib/interactions/types";
 
 /**
  * Reactive timeline block state.

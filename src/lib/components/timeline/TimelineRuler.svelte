@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TimelineConfig } from "@timeline/types";
+  import type { TimelineConfig } from "@lib/interactions/types";
 
   interface Props {
     config: TimelineConfig;

@@ -1,4 +1,4 @@
-import type { EdgeHandle, TimeBlock } from "@lib/timeline/types";
+import type { EdgeHandle, TimeBlock } from "@lib/interactions/types";
 import { BlockInteraction } from "./BlockInteraction.svelte";
 import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
 

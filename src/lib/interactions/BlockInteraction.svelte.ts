@@ -1,4 +1,4 @@
-import type { TimeBlock } from "@lib/timeline/types";
+import type { TimeBlock } from "@lib/interactions/types";
 import { addBlock, updateBlock } from "@stores/timelineBlocks.svelte";
 import type { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
 
