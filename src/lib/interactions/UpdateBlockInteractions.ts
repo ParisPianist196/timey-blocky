@@ -1,8 +1,8 @@
-import type { TimeBlock } from "@lib/timeline/types";
+import type { EdgeHandle, TimeBlock } from "@lib/timeline/types";
 import { BlockInteraction } from "./BlockInteraction.svelte";
 import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
 
-export class MoveBlockInteraction extends BlockInteraction {
+export class UpdateBlockInteraction extends BlockInteraction {
   curOffsetMinutes = 0;
 
   constructor(block: TimeBlock, interactions: TimelineInteractions) {
@@ -35,5 +35,35 @@ export class MoveBlockInteraction extends BlockInteraction {
       start: range.start,
       end: range.end,
     };
+  }
+
+  resizeAction(event: PointerEvent, edge: EdgeHandle): number | undefined {
+    const currentMinutes = super.pointerMoveAction(event);
+
+    if (currentMinutes === undefined || !this.localBlock) {
+      return;
+    }
+
+    if (edge === "start") {
+      const start = this.timelineInteractions.getResizedStart(
+        this.initialBlock.end,
+        currentMinutes,
+      );
+
+      this.localBlock = {
+        ...this.localBlock,
+        start,
+      };
+    } else {
+      const end = this.timelineInteractions.getResizedEnd(
+        this.initialBlock.start,
+        currentMinutes,
+      );
+
+      this.localBlock = {
+        ...this.localBlock,
+        end,
+      };
+    }
   }
 }

@@ -6,10 +6,9 @@
   } from "@lib/stores/timelineBlocks.svelte";
 
   import { TimelineInteractions } from "@lib/interactions/TimelineInteractions";
-  import { MoveBlockInteraction } from "@lib/interactions/MoveBlockInteraction";
-
   import type { TimeBlock } from "@timeline/types";
   import { tick } from "svelte";
+  import { UpdateBlockInteraction } from "@lib/interactions/UpdateBlockInteractions";
 
   interface Props {
     block: TimeBlock;
@@ -23,121 +22,26 @@
   let editingTitle = $state(false);
   const textColor = $derived(contrastText(block.color));
 
-  let movingInteraction = $derived(
-    new MoveBlockInteraction(block, interactions),
+  let updateInteractions = $derived(
+    new UpdateBlockInteraction(block, interactions),
   );
+
   const visualTop = $derived(
-    movingInteraction.localBlock
-      ? ((movingInteraction.localBlock.start - interactions.config.dayStart) /
+    updateInteractions.localBlock
+      ? ((updateInteractions.localBlock.start - interactions.config.dayStart) /
           60) *
           interactions.config.pixelsPerHour
       : 0,
   );
 
   const visualHeight = $derived(
-    movingInteraction.localBlock
-      ? ((movingInteraction.localBlock.end -
-          movingInteraction.localBlock.start) /
+    updateInteractions.localBlock
+      ? ((updateInteractions.localBlock.end -
+          updateInteractions.localBlock.start) /
           60) *
           interactions.config.pixelsPerHour
       : 0,
   );
-
-  /**
-   * Begin resizing the start of the block.
-   */
-  function handleResizeStartPointerDown(event: PointerEvent) {
-    if (event.button !== 0 || editingTitle) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    // originalStart = block.start;
-    // originalEnd = block.end;
-
-    // localStart = block.start;
-    // localEnd = block.end;
-
-    // interaction = "resizing-start";
-
-    // hoveredResizeHandle = "start";
-
-    // capturePointer(event);
-  }
-
-  /**
-   * Begin resizing the end of the block.
-   */
-  function handleResizeEndPointerDown(event: PointerEvent) {
-    if (event.button !== 0 || editingTitle) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    // originalStart = block.start;
-    // originalEnd = block.end;
-
-    // localStart = block.start;
-    // localEnd = block.end;
-
-    // interaction = "resizing-end";
-
-    // hoveredResizeHandle = "end";
-
-    // capturePointer(event);
-  }
-
-  /**
-   * Update the temporary visual state while dragging.
-   *
-   * IMPORTANT:
-   *
-   * We do NOT update the store here.
-   *
-   * This function only changes localStart/localEnd,
-   * which makes dragging visually immediate.
-   */
-  function handlePointerMove(event: PointerEvent) {
-    // if (interaction === "resizing-start") {
-    //   localStart = getResizedStart(
-    //     originalEnd,
-    //     currentMinutes,
-    //     interactions.config.dayStart,
-    //     interactions.config.snapMinutes,
-    //   );
-    //   localEnd = originalEnd;
-    //   return;
-    // }
-    // if (interaction === "resizing-end") {
-    //   localStart = originalStart;
-    //   localEnd = getResizedEnd(
-    //     originalStart,
-    //     currentMinutes,
-    //     interactions.config.dayEnd,
-    //     interactions.config.snapMinutes,
-    //   );
-    // }
-  }
-
-  /**
-   * Cancel the interaction without persisting.
-   */
-  // function handlePointerCancel(event: PointerEvent) {
-  //   if (pointerId === null || event.pointerId !== pointerId) {
-  //     return;
-  //   }
-
-  //   event.preventDefault();
-  //   event.stopPropagation();
-
-  //   releasePointer();
-
-  //   resetInteraction();
-  // }
 
   function handleDelete(event: MouseEvent) {
     event.preventDefault();
@@ -229,9 +133,9 @@
       style:background-color={block.color}
       style:color={textColor}
       aria-label={`Move ${block.label || "time block"}`}
-      onpointerdown={(e) => movingInteraction.pointerStartAction(e)}
-      onpointermove={(e) => movingInteraction.pointerMoveAction(e)}
-      onpointerup={(e) => movingInteraction.pointerEndAction(e)}
+      onpointerdown={(e) => updateInteractions.pointerStartAction(e)}
+      onpointermove={(e) => updateInteractions.pointerMoveAction(e)}
+      onpointerup={(e) => updateInteractions.pointerEndAction(e)}
       // onpointercancel={handlePointerCancel}
     >
       <span class="label">
@@ -244,9 +148,9 @@
       class="resize-handle resize-handle-start"
       type="button"
       aria-label={`Resize start of ${block.label || "time block"}`}
-      onpointerdown={handleResizeStartPointerDown}
-      onpointermove={handlePointerMove}
-      // onpointerup={handlePointerUp}
+      onpointerdown={(e) => updateInteractions.pointerStartAction(e)}
+      onpointermove={(e) => updateInteractions.resizeAction(e, "start")}
+      onpointerup={(e) => updateInteractions.pointerEndAction(e)}
       // onpointercancel={handlePointerCancel}
     >
       <span class="handle-grip"></span>
@@ -257,9 +161,9 @@
       class="resize-handle resize-handle-end"
       type="button"
       aria-label={`Resize end of ${block.label || "time block"}`}
-      onpointerdown={handleResizeEndPointerDown}
-      onpointermove={handlePointerMove}
-      // onpointerup={handlePointerUp}
+      onpointerdown={(e) => updateInteractions.pointerStartAction(e)}
+      onpointermove={(e) => updateInteractions.resizeAction(e, "end")}
+      onpointerup={(e) => updateInteractions.pointerEndAction(e)}
       // onpointercancel={handlePointerCancel}
     >
       <span class="handle-grip"></span>

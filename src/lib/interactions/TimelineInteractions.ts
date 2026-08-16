@@ -66,4 +66,38 @@ export class TimelineInteractions {
       end: start + duration,
     };
   }
+
+  /**
+   * Resize the beginning of a block.
+   */
+  getResizedStart(
+    originalEnd: number,
+    currentMinutes: number,
+    minimumDuration = 15,
+  ): number {
+    const snapped = snapMinutes(currentMinutes, this.config.snapMinutes);
+
+    return clampMinutes(
+      snapped,
+      this.config.dayStart,
+      originalEnd - minimumDuration,
+    );
+  }
+
+  /**
+   * Resize the end of a block.
+   */
+  getResizedEnd(
+    originalStart: number,
+    currentMinutes: number,
+    minimumDuration = 15,
+  ): number {
+    const snapped = snapMinutes(currentMinutes, this.config.snapMinutes);
+
+    return clampMinutes(
+      snapped,
+      originalStart + minimumDuration,
+      this.config.dayEnd,
+    );
+  }
 }

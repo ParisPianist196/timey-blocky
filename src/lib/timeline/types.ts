@@ -31,3 +31,5 @@ export type DragSelection = {
   start: number;
   end: number;
 };
+
+export type EdgeHandle = "start" | "end";

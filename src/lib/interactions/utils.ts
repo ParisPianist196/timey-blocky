@@ -27,33 +27,3 @@ export function normalizeRange(start: number, end: number): DragSelection {
     end: Math.max(start, end),
   };
 }
-
-/**
- * Resize the beginning of a block.
- */
-export function getResizedStart(
-  originalEnd: number,
-  currentMinutes: number,
-  dayStart: number,
-  snapInterval = 15,
-  minimumDuration = 15,
-): number {
-  const snapped = snapMinutes(currentMinutes, snapInterval);
-
-  return clampMinutes(snapped, dayStart, originalEnd - minimumDuration);
-}
-
-/**
- * Resize the end of a block.
- */
-export function getResizedEnd(
-  originalStart: number,
-  currentMinutes: number,
-  dayEnd: number,
-  snapInterval = 15,
-  minimumDuration = 15,
-): number {
-  const snapped = snapMinutes(currentMinutes, snapInterval);
-
-  return clampMinutes(snapped, originalStart + minimumDuration, dayEnd);
-}
